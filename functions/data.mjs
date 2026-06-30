@@ -1,4 +1,5 @@
 import { getStore } from "@netlify/blobs";
+import zlib from "node:zlib";
 
 // Shared data store for the Aldora Quote Tracker.
 //  GET  /api/data            -> returns the latest snapshot { quotes, log, updatedAt } (public, read-only)
@@ -34,8 +35,16 @@ export default async (req) => {
       });
     }
     let incoming = {};
-    try { incoming = JSON.parse(await req.text() || "{}"); }
-    catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad json" }), { status: 400, headers: { "content-type": "application/json", ...CORS } }); }
+    try {
+      let raw;
+      if ((req.headers.get("x-encoding") || "") === "gzip") {
+        const buf = Buffer.from(await req.arrayBuffer());
+        raw = zlib.gunzipSync(buf).toString("utf-8");
+      } else {
+        raw = await req.text();
+      }
+      incoming = JSON.parse(raw || "{}");
+    } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad json" }), { status: 400, headers: { "content-type": "application/json", ...CORS } }); }
 
     let existing = {};
     try { existing = JSON.parse((await store.get("snapshot", { type: "text" })) || "{}"); } catch (e) {}
