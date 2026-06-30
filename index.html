@@ -133,9 +133,9 @@
             <div onClick="{{ closeCust }}" style="position:fixed;inset:0;z-index:30;"></div>
             <div style="position:absolute;top:100%;left:0;margin-top:5px;z-index:31;background:#fff;border:1px solid #d6dedd;border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.18);padding:8px;width:300px;max-width:86vw;">
               <input type="text" value="{{ custSearch }}" onInput="{{ onCustSearch }}" placeholder="Filter customers…" style="width:100%;font-size:13px;padding:8px 10px;border:1px solid #e2e7e6;border-radius:7px;margin-bottom:6px;background:#fcfdfd;" />
-              <div class="aq-scroll" style="max-height:240px;overflow:auto;">
+              <div class="aq-scroll" style="max-height:min(240px,50vh);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;">
                 <sc-for list="{{ custOptions }}" as="c" hint-placeholder-count="6">
-                  <label class="aq-row" style="display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:13.5px;">
+                  <label class="aq-row" style="display:flex;align-items:center;gap:9px;padding:10px 8px;border-radius:6px;cursor:pointer;font-size:13.5px;">
                     <input type="checkbox" checked="{{ c.checked }}" onChange="{{ c.onToggle }}" style="width:16px;height:16px;flex:0 0 auto;accent-color:#075b65;" />
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.name }}</span>
                   </label>
