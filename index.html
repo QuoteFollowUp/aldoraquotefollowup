@@ -37,7 +37,7 @@
     <div style="display:flex;flex-direction:column;justify-content:center;min-width:130px;flex:1 1 auto;overflow:hidden;line-height:1.05;">
       <div style="display:flex;align-items:baseline;gap:7px;">
         <span style="font-weight:800;letter-spacing:.22em;font-size:18px;white-space:nowrap;">ALDORA</span>
-        <span style="font-size:9px;color:#5d726f;letter-spacing:.05em;">v18</span>
+        <span style="font-size:9px;color:#5d726f;letter-spacing:.05em;">v19</span>
       </div>
       <span style="font-size:11px;color:#8fa3a1;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">Quote Follow-Up Tracker</span>
     </div>
@@ -47,6 +47,7 @@
         <button class="aq-tab" onClick="{{ goLogged }}" style="{{ tabLoggedStyle }}">Logged Follow-Ups</button>
         <button class="aq-tab" onClick="{{ goMgmt }}" style="{{ tabMgmtStyle }}">Management</button>
       </nav>
+      <button class="aq-ghost" onClick="{{ openSyncSetup }}" title="{{ syncLabel }}" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:{{ syncPillBg }};color:{{ syncPillColor }};padding:8px 12px;border-radius:7px;cursor:pointer;border:1px solid {{ syncPillBorder }};flex:0 0 auto;white-space:nowrap;">{{ syncPillText }}</button>
       <button class="aq-ghost" onClick="{{ openAdmin }}" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;background:#16302e;color:#dff0ee;padding:8px 13px;border-radius:7px;cursor:pointer;border:1px solid #2c4644;flex:0 0 auto;">⚙ Admin</button>
     </div>
   </header>
@@ -729,6 +730,29 @@
     </div>
   </sc-if>
 
+  <!-- LIVE SYNC SETUP MODAL (rep-facing, no PIN) -->
+  <sc-if value="{{ syncSetupOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeSyncSetup }}" style="position:fixed;inset:0;background:rgba(11,32,31,.55);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:32px 20px;overflow:auto;">
+      <div onClick="{{ stop }}" style="background:#fff;border-radius:14px;max-width:460px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.3);">
+        <div style="padding:18px 24px;border-bottom:1px solid #eef1f1;display:flex;align-items:center;justify-content:space-between;">
+          <h2 style="margin:0;font-size:17px;font-weight:800;color:#0b201f;">Live Sync</h2>
+          <button class="aq-ghost" onClick="{{ closeSyncSetup }}" style="border:none;background:#f2f5f5;width:30px;height:30px;border-radius:7px;cursor:pointer;font-size:16px;color:#5c6a68;">✕</button>
+        </div>
+        <div style="padding:18px 24px 24px;">
+          <sc-if value="{{ syncOn }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13.5px;color:#1f7a3d;font-weight:700;background:#e5f3e8;border-radius:8px;padding:11px 14px;margin-bottom:14px;">🟢 Live sync is ON for this device. Your follow-ups, verbal quotes, and market intel publish to the whole team instantly.</div>
+          </sc-if>
+          <div style="font-size:13.5px;color:#3a4846;line-height:1.55;margin-bottom:14px;">Enter the <b>team sync code</b> (ask your manager) once on this phone. After that, everything you log here shows up for everyone automatically.</div>
+          <input type="text" value="{{ syncCodeInput }}" onInput="{{ onSyncCode }}" placeholder="Paste team sync code" autocomplete="off" style="width:100%;font-size:15px;padding:11px 13px;border:1px solid #d6dedd;border-radius:8px;background:#fcfdfd;margin-bottom:14px;" />
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button class="aq-ghost" onClick="{{ closeSyncSetup }}" style="font-size:13.5px;font-weight:600;color:#5c6a68;background:#f2f5f5;border:1px solid #dde4e3;padding:10px 16px;border-radius:8px;cursor:pointer;">Cancel</button>
+            <button class="aq-btn" onClick="{{ saveSyncCode }}" style="font-size:13.5px;font-weight:700;color:#fff;background:#075b65;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;">Turn on sync</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
   <!-- DETAIL MODAL -->
   <sc-if value="{{ detailOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closeDetail }}" style="position:fixed;inset:0;background:rgba(11,32,31,.55);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:32px 20px;overflow:auto;">
@@ -967,6 +991,7 @@ class Component extends DCLogic {
     page: 0,
     formQuote: null, formAnswers: {}, formEmail: '', formError: '',
     marketIntel: [], miOpen: false, mi_customer: '', mi_rep: '', mi_answers: {}, mi_error: '',
+    syncSetupOpen: false, syncCodeInput: '',
     detailRecord: null,
     adminOpen: false, adminAuthed: false, adminPin: '', adminError: '',
     fullSetupText: '', fullSetupMsg: '', fullSetupKind: '',
@@ -1149,13 +1174,35 @@ class Component extends DCLogic {
       }
     }
     const cloudTag = cloud ? '☁ ' : '';
+
+    // Live rep follow-ups shared via cloud (everyone sees each other's in-app logs)
+    if (cloud && Array.isArray(cloud.liveLog) && cloud.liveLog.length) {
+      const seenUid = new Set(imported.map(r => r.uid));
+      const masterKeys = new Set(imported.map(r => r.matchKey || this.qkey(r))); // admin's uploaded master
+      cloud.liveLog.forEach(r => {
+        if (!r || !r.uid) return;
+        const mk = r.matchKey || this.qkey(r);
+        // skip if already in this device's set, or the admin's master upload already covers this quote
+        if (seenUid.has(r.uid) || masterKeys.has(mk)) return;
+        seenUid.add(r.uid);
+        imported.push({ ...r, rep: this.normalizeRep(r.rep || ''), matchKey: mk, source: 'live' });
+      });
+    }
+    // Live verbal quotes shared via cloud (appear in everyone's Open Quotes)
+    let sharedVerbal = [];
+    if (cloud && Array.isArray(cloud.liveQuotes) && cloud.liveQuotes.length) {
+      const localUids = new Set((verbal || []).map(v => v.uid));
+      sharedVerbal = cloud.liveQuotes.filter(v => v && v.uid && !localUids.has(v.uid)).map(v => ({ ...v, rep: this.normalizeRep(v.rep || '') }));
+    }
+    const allRows2 = sharedVerbal.length ? [...sharedVerbal, ...allRows] : allRows;
+
     // Market intel: merge shared (cloud) + local device entries, de-duped
     let localMi = [];
     try { localMi = (await this.idbGet('marketIntel')) || []; } catch (e) {}
     const cloudMi = (cloud && Array.isArray(cloud.marketIntel)) ? cloud.marketIntel : [];
     const miSeen = new Set(), marketIntel = [];
-    [...localMi, ...cloudMi].forEach(m => { const k = (m.customer||'') + '|' + (m.loggedAt||''); if (!miSeen.has(k)) { miSeen.add(k); marketIntel.push(m); } });
-    this.setState({ rows: allRows, stored, imported, marketIntel, loading: false, cloudLive: !!cloud, dataMeta: cloudTag + meta + ' · ' + rows.length.toLocaleString() + ' quotes' + importMeta });
+    [...localMi, ...cloudMi].forEach(m => { const k = m.uid || ((m.customer||'') + '|' + (m.loggedAt||'')); if (!miSeen.has(k)) { miSeen.add(k); marketIntel.push(m); } });
+    this.setState({ rows: allRows2, stored, imported, marketIntel, loading: false, cloudLive: !!cloud, dataMeta: cloudTag + meta + ' · ' + rows.length.toLocaleString() + ' quotes' + importMeta });
   }
 
   normalize(payload) {
@@ -1485,6 +1532,7 @@ class Component extends DCLogic {
     // Excel serial date for today (days since 1899-12-30)
     const serial = Math.floor((now - new Date(Date.UTC(1899, 11, 30))) / 86400000);
     const rec = {
+      uid: 'vq' + Date.now() + Math.random().toString(36).slice(2, 6),
       facility: s.vq_facility || '', division: '', rep: this.normalizeRep(repName),
       month: now.toLocaleString('en-US', { month: 'short' }) + ' ' + now.getFullYear(),
       customer: s.vq_customer.trim(),
@@ -1507,7 +1555,8 @@ class Component extends DCLogic {
     }
     const rows = [rec, ...this.state.rows];
     this.setState({ rows, customReps, verbalOpen: false });
-    this.toast('Verbal quote added for ' + rec.customer + ' — now in Open Quotes.');
+    this.autoPublish({ appendVerbal: [rec] });
+    this.toast('Verbal quote added for ' + rec.customer + ' — now in Open Quotes.' + (this.hasSyncKey() ? ' Shared with team.' : ''));
   };
 
   printSheet = () => {
@@ -1555,6 +1604,17 @@ class Component extends DCLogic {
     this.setState({ miOpen: true, mi_error: '', mi_customer: one, mi_rep: this.state.f_rep || '', mi_answers: {} });
   };
   closeMarket = () => this.setState({ miOpen: false });
+  openSyncSetup = () => this.setState({ syncSetupOpen: true, syncCodeInput: '' });
+  closeSyncSetup = () => this.setState({ syncSetupOpen: false });
+  onSyncCode = (e) => this.setState({ syncCodeInput: e.target.value });
+  saveSyncCode = () => {
+    const code = (this.state.syncCodeInput || '').trim();
+    if (!code) return;
+    try { localStorage.setItem('aq_cloudKey', code); } catch (e) {}
+    this.setState({ cloudKey: code, syncSetupOpen: false });
+    this.toast('Live sync enabled on this device ✓');
+    this.loadAll();
+  };
   onMiCustomer = (e) => this.setState({ mi_customer: e.target.value });
   onMiRep = (e) => this.setState({ mi_rep: e.target.value });
   setMiAnswer = (key, val) => this.setState(s => ({ mi_answers: { ...s.mi_answers, [key]: val } }));
@@ -1564,14 +1624,13 @@ class Component extends DCLogic {
     if (!s.mi_rep) return this.setState({ mi_error: 'Please choose a sales rep.' });
     const filled = Object.keys(s.mi_answers).filter(k => (s.mi_answers[k] || '').toString().trim());
     if (!filled.length) return this.setState({ mi_error: 'Answer at least one question before saving.' });
-    const rec = { customer: s.mi_customer.trim(), rep: this.normalizeRep(s.mi_rep), answers: { ...s.mi_answers }, loggedAt: Date.now() };
+    const rec = { uid: 'mi' + Date.now() + Math.random().toString(36).slice(2, 6), customer: s.mi_customer.trim(), rep: this.normalizeRep(s.mi_rep), answers: { ...s.mi_answers }, loggedAt: Date.now() };
     const list = [rec, ...(this.state.marketIntel || [])];
     try { await this.idbSet('marketIntel', list); } catch (e) {}
     this.setState({ marketIntel: list, miOpen: false });
-    this.toast('Market intel saved for ' + rec.customer + '.');
-    // If this device has the sync key, publish so branch managers see it
-    const hasKey = this.state.cloudKey || (() => { try { return localStorage.getItem('aq_cloudKey') || ''; } catch (e) { return ''; } })();
-    if (hasKey) { try { this.pushCloud({ marketIntel: list }); } catch (e) {} }
+    this.toast('Market intel saved for ' + rec.customer + '.' + (this.hasSyncKey() ? ' Shared with team.' : ''));
+    // Publish to the shared cloud so branch managers see it
+    this.autoPublish({ appendMarket: [rec] });
   };
 
   submitForm = () => {
@@ -1588,8 +1647,18 @@ class Component extends DCLogic {
     this.setState({ stored, formQuote: null });
     this.idbSet('logged', stored).catch(() => {});
     this.postToGoogle(record);
-    this.toast('Follow-up logged ✓' + (this.state.entryIds ? ' · synced to Google Sheet' : ''));
+    // Auto-publish to the shared cloud so everyone sees it (needs sync code saved on this device)
+    this.autoPublish({ appendLog: [record] });
+    this.toast('Follow-up logged ✓' + (this.state.entryIds ? ' · synced to Google Sheet' : '') + (this.hasSyncKey() ? ' · shared with team' : ''));
   };
+
+  // Does this device have the sync code saved?
+  hasSyncKey() { return !!(this.state.cloudKey || (() => { try { return localStorage.getItem('aq_cloudKey') || ''; } catch (e) { return ''; } })()); }
+  // Fire-and-forget publish of a live append; silent if no sync code on this device
+  autoPublish(partial) {
+    if (!this.hasSyncKey()) return;
+    try { this.pushCloud(partial).then(r => { if (r && r.ok) this.setState({ cloudLive: true }); }).catch(() => {}); } catch (e) {}
+  }
 
   postToGoogle(record) {
     const ids = this.state.entryIds; if (!ids) return;
@@ -1982,6 +2051,10 @@ class Component extends DCLogic {
       detailOpen: !!s.detailRecord,
       closeForm: this.closeForm, submitForm: this.submitForm, onFormEmail: this.onFormEmail, formEmail: s.formEmail, formError: s.formError,
       miOpen: s.miOpen, openMarket: this.openMarket, closeMarket: this.closeMarket, submitMarket: this.submitMarket,
+      syncOn: this.hasSyncKey(), syncLabel: this.hasSyncKey() ? 'Live sync: On' : 'Enable live sync',
+      syncPillText: this.hasSyncKey() ? '🟢 Synced' : '🔄 Enable sync',
+      syncPillBg: this.hasSyncKey() ? '#123a26' : '#3a2f16', syncPillColor: this.hasSyncKey() ? '#a7e0bd' : '#e8d09a', syncPillBorder: this.hasSyncKey() ? '#1f5a38' : '#5a4a20',
+      syncSetupOpen: s.syncSetupOpen, openSyncSetup: this.openSyncSetup, closeSyncSetup: this.closeSyncSetup, onSyncCode: this.onSyncCode, syncCodeInput: s.syncCodeInput, saveSyncCode: this.saveSyncCode,
       mi_customer: s.mi_customer, mi_rep: s.mi_rep, mi_error: s.mi_error, onMiCustomer: this.onMiCustomer, onMiRep: this.onMiRep,
       closeDetail: this.closeDetail, reopenRecord: this.reopenRecord, relog: this.relog,
       syncNote: s.entryIds ? 'Will also post to your Google Sheet.' : 'Saved in the Logged tab.',
