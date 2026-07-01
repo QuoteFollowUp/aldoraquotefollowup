@@ -27,10 +27,10 @@ export default async (req) => {
   }
 
   if (req.method === "POST") {
-    const key = req.headers.get("x-sync-key") || "";
-    const expected = process.env.SYNC_KEY || "";
+    const key = (req.headers.get("x-sync-key") || "").trim();
+    const expected = (process.env.SYNC_KEY || process.env.sync_key || process.env.Sync_Key || "").trim();
     if (!expected || key !== expected) {
-      return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
+      return new Response(JSON.stringify({ ok: false, error: "unauthorized", hasEnv: !!expected }), {
         status: 401, headers: { "content-type": "application/json", ...CORS },
       });
     }
@@ -52,6 +52,22 @@ export default async (req) => {
     const merged = { ...existing };
     if (incoming.quotes !== undefined) merged.quotes = incoming.quotes;
     if (incoming.log !== undefined) merged.log = incoming.log;
+    if (incoming.marketIntel !== undefined) merged.marketIntel = incoming.marketIntel;
+
+    // Live appends from reps' phones — accumulate, de-dupe by uid, keep newest.
+    const appendInto = (field, items, cap) => {
+      if (!Array.isArray(items) || !items.length) return;
+      const cur = Array.isArray(merged[field]) ? merged[field] : [];
+      const seen = new Set(cur.map((x) => x && x.uid).filter(Boolean));
+      const add = items.filter((x) => x && x.uid && !seen.has(x.uid));
+      let next = [...cur, ...add];
+      if (cap && next.length > cap) next = next.slice(next.length - cap);
+      merged[field] = next;
+    };
+    appendInto("liveLog", incoming.appendLog, 12000);
+    appendInto("marketIntel", incoming.appendMarket, 6000);
+    appendInto("liveQuotes", incoming.appendVerbal, 6000);
+
     merged.updatedAt = Date.now();
 
     await store.set("snapshot", JSON.stringify(merged));
