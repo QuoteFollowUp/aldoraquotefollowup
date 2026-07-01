@@ -37,7 +37,7 @@
     <div style="display:flex;flex-direction:column;justify-content:center;min-width:130px;flex:1 1 auto;overflow:hidden;line-height:1.05;">
       <div style="display:flex;align-items:baseline;gap:7px;">
         <span style="font-weight:800;letter-spacing:.22em;font-size:18px;white-space:nowrap;">ALDORA</span>
-        <span style="font-size:9px;color:#5d726f;letter-spacing:.05em;">v19</span>
+        <span style="font-size:9px;color:#5d726f;letter-spacing:.05em;">v20</span>
       </div>
       <span style="font-size:11px;color:#8fa3a1;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">Quote Follow-Up Tracker</span>
     </div>
@@ -1014,6 +1014,31 @@ class Component extends DCLogic {
   // collapse case/spelling/initials duplicates onto one canonical name
   REP_NORMALIZE = { 'anglea steinhubel':'Angela Steinhubel','as':'Angela Steinhubel','matthew mcdermott':'Matthew McDermott','waylon mccall':'Waylon McCall','jim wannmaker':'Jim Wanamaker','jw':'Jim Wanamaker','bw':'Brian Wood','sc':'Steve Crum','ck':'Christian Kelley','tony':'Tony Follman' };
   normalizeRep(name) { const n = (name || '').trim(); if (!n) return n; return this.REP_NORMALIZE[n.toLowerCase()] || n; }
+  // Map a logger's email to a rep name. Prefers matching the known roster; else derives First-initial Lastname.
+  repFromEmail(email) {
+    const e = (email || '').trim().toLowerCase();
+    if (!e || e.indexOf('@') < 0) return '';
+    const local = e.split('@')[0].replace(/[^a-z.\-_]/g, '');
+    if (!local) return '';
+    const parts = local.split(/[.\-_]+/).filter(Boolean);
+    // Try to match a roster rep by common email patterns
+    const roster = this.repRoster();
+    const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+    for (const full of roster) {
+      const bits = full.toLowerCase().split(/\s+/).filter(Boolean);
+      if (bits.length < 2) continue;
+      const first = bits[0], last = bits[bits.length - 1];
+      const cands = [first + last, first + '.' + last, first[0] + last, first + last[0], last + first, last + first[0], first + '.' + last[0]];
+      if (cands.includes(local) || (parts.length >= 2 && parts[0] === first && parts[parts.length - 1] === last)) return full;
+    }
+    // Fallback: derive a readable name from the email
+    if (parts.length >= 2) return cap(parts[0]) + ' ' + cap(parts[parts.length - 1]);
+    // single token like "chaas" → first initial + rest as last name
+    if (local.length > 2) return local[0].toUpperCase() + '. ' + cap(local.slice(1));
+    return '';
+  }
+  // The rep a follow-up should be counted under: whoever logged it (email) wins, else the quote's rep
+  loggerRep(r) { return this.repFromEmail(r && r.email) || this.normalizeRep((r && r.rep) || ''); }
   PAGE_SIZE = 50;
 
   // Printed call-sheet answer key (lettered columns G–Q matching the Google Form)
@@ -1657,7 +1682,13 @@ class Component extends DCLogic {
   // Fire-and-forget publish of a live append; silent if no sync code on this device
   autoPublish(partial) {
     if (!this.hasSyncKey()) return;
-    try { this.pushCloud(partial).then(r => { if (r && r.ok) this.setState({ cloudLive: true }); }).catch(() => {}); } catch (e) {}
+    try {
+      this.pushCloud(partial).then(r => {
+        if (r && r.ok) { this.setState({ cloudLive: true }); }
+        else if (r && r.error === 'unauthorized') { this.toast('⚠ Sync code rejected — re-enter it under 🔄 (top right).'); }
+        else if (r && !r.ok) { this.toast('⚠ Saved on this phone but team sync failed — will retry next time.'); }
+      }).catch(() => {});
+    } catch (e) {}
   }
 
   postToGoogle(record) {
@@ -1850,9 +1881,10 @@ class Component extends DCLogic {
     const Q = this.QUESTIONS.length;
     const agg = {};
     this.mergedLogged().forEach(r => {
-      if (!r.rep || !r.loggedAt || r.loggedAt < from || (to != null && r.loggedAt >= to)) return;
+      const rep = this.loggerRep(r);
+      if (!rep || !r.loggedAt || r.loggedAt < from || (to != null && r.loggedAt >= to)) return;
       const answered = this.QUESTIONS.reduce((a, q) => a + (((r.answers || {})[q.key] || '').toString().trim() ? 1 : 0), 0);
-      const a = agg[r.rep] || (agg[r.rep] = { rep: r.rep, count: 0, answered: 0, custs: new Set() });
+      const a = agg[rep] || (agg[rep] = { rep: rep, count: 0, answered: 0, custs: new Set() });
       a.count++; a.answered += answered; if (r.customer) a.custs.add(r.customer.trim());
     });
     return Object.values(agg).map(a => ({ rep: a.rep, count: a.count, answered: a.answered, customers: a.custs.size, pct: Math.round((a.answered / (a.count * Q)) * 100) }));
@@ -1867,9 +1899,10 @@ class Component extends DCLogic {
     const wk = this.weekStartMs();
     const agg = {};
     this.mergedLogged().forEach(r => {
-      if (!r.rep || !r.loggedAt || r.loggedAt < wk) return;
+      const rep = this.loggerRep(r);
+      if (!rep || !r.loggedAt || r.loggedAt < wk) return;
       const answered = this.QUESTIONS.reduce((a, q) => a + (((r.answers || {})[q.key] || '').toString().trim() ? 1 : 0), 0);
-      const a = agg[r.rep] || (agg[r.rep] = { rep: r.rep, count: 0, answered: 0 });
+      const a = agg[rep] || (agg[rep] = { rep: rep, count: 0, answered: 0 });
       a.count++; a.answered += answered;
     });
     const Q = this.QUESTIONS.length;
@@ -1885,9 +1918,10 @@ class Component extends DCLogic {
     const WEEK = 7 * 86400000;
     const agg = {};
     this.mergedLogged().forEach(r => {
-      if (!r.rep || !r.loggedAt) return;
+      const rep = this.loggerRep(r);
+      if (!rep || !r.loggedAt) return;
       const answered = this.QUESTIONS.reduce((a, q) => a + (((r.answers || {})[q.key] || '').toString().trim() ? 1 : 0), 0);
-      const a = agg[r.rep] || (agg[r.rep] = { rep: r.rep, count: 0, answered: 0, custs: new Set(), weeks: {}, first: r.loggedAt, last: r.loggedAt, thisWeek: 0, amtByQuote: {} });
+      const a = agg[rep] || (agg[rep] = { rep: rep, count: 0, answered: 0, custs: new Set(), weeks: {}, first: r.loggedAt, last: r.loggedAt, thisWeek: 0, amtByQuote: {} });
       a.count++; a.answered += answered;
       if (r.customer) a.custs.add(r.customer.trim().toLowerCase());
       const ws = Math.floor((r.loggedAt - wk) / WEEK); // 0 = this week, -1 last week…
