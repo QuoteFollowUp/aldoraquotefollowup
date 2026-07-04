@@ -68,6 +68,12 @@ export default async (req) => {
     appendInto("marketIntel", incoming.appendMarket, 6000);
     appendInto("liveQuotes", incoming.appendVerbal, 6000);
 
+    // Emailed-quote keys (plain strings) — accumulate as a de-duped set so no estimator is emailed twice.
+    if (Array.isArray(incoming.appendEmailed) && incoming.appendEmailed.length) {
+      const cur = Array.isArray(merged.emailedKeys) ? merged.emailedKeys : [];
+      merged.emailedKeys = [...new Set([...cur, ...incoming.appendEmailed])].slice(-20000);
+    }
+
     merged.updatedAt = Date.now();
 
     await store.set("snapshot", JSON.stringify(merged));
