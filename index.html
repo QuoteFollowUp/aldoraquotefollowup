@@ -39,7 +39,7 @@
     <div style="display:flex;flex-direction:column;justify-content:center;min-width:130px;flex:1 1 auto;overflow:hidden;line-height:1.05;">
       <div style="display:flex;align-items:baseline;gap:7px;">
         <span style="font-weight:800;letter-spacing:.22em;font-size:18px;white-space:nowrap;">ALDORA</span>
-        <span style="font-size:9px;color:#5d726f;letter-spacing:.05em;">v65</span>
+        <span style="font-size:9px;color:#5d726f;letter-spacing:.05em;">v66</span>
       </div>
       <span style="font-size:11px;color:#8fa3a1;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">Quote Follow-Up Tracker</span>
     </div>
@@ -248,6 +248,8 @@
             <option value="date_desc">Newest date</option>
             <option value="customer_asc">Customer A–Z</option>
             <option value="division_asc">Division (Glass / Metal)</option>
+            <option value="closed_asc">Closed in Fenevision (open first)</option>
+            <option value="closed_desc">Closed in Fenevision (closed first)</option>
           </select>
         </div>
       </div>
@@ -340,6 +342,7 @@
             <th style="padding:11px 14px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7977;">Rep</th>
             <th style="padding:11px 14px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7977;">Quoted By</th>
             <th style="padding:11px 14px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7977;">Logged</th>
+            <th style="padding:11px 14px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7977;text-align:center;">Closed in<br/>Fenevision</th>
             <th style="padding:11px 14px;"></th>
           </tr>
         </thead>
@@ -361,6 +364,12 @@
               <td style="padding:11px 14px;color:#5c6a68;white-space:nowrap;font-variant-numeric:tabular-nums;">
                 {{ q.loggedFmt }}
                 <span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;padding:2px 6px;border-radius:5px;margin-left:6px;background:{{ q.srcBg }};color:{{ q.srcColor }};">{{ q.srcLabel }}</span>
+              </td>
+              <td style="padding:9px 14px;text-align:center;">
+                <label style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">
+                  <input type="checkbox" checked="{{ q.closed }}" onChange="{{ q.onToggleClosed }}" style="position:absolute;opacity:0;width:0;height:0;" />
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;border:2px solid {{ q.closedBorder }};background:{{ q.closedBg }};color:#dc2626;font-size:16px;font-weight:900;line-height:1;">{{ q.closedMark }}</span>
+                </label>
               </td>
               <td style="padding:9px 14px;text-align:right;white-space:nowrap;">
                 <button class="aq-ghost" onClick="{{ q.onView }}" style="background:#fff;border:1px solid #d6dedd;color:#16211f;font-weight:600;font-size:12.5px;padding:8px 13px;border-radius:7px;cursor:pointer;">View details</button>
@@ -1359,7 +1368,7 @@ class Component extends DCLogic {
     loading: true, rows: null, dataMeta: 'Loading quotes…',
     view: 'open',
     imported: [], stored: [],
-    estEmailOpen: false, emailedKeys: [],
+    estEmailOpen: false, emailedKeys: [], closedKeys: [],
     f_rep: '', f_customers: [], custOpen: false, custSearch: '', f_search: '', f_min: '', f_max: '',
     f_month: '', f_facility: '', f_division: '', f_quotedBy: '', f_outcome: '', f_days: '', f_sort: 'amount_desc',
     page: 0,
@@ -1551,6 +1560,7 @@ class Component extends DCLogic {
     } catch (e) {}
     this.idbGet('customReps').then(cr => { if (cr && cr.length) this.setState({ customReps: cr }); }).catch(() => {});
     this.idbGet('emailedKeys').then(ek => { if (ek && ek.length) this.setState({ emailedKeys: ek }); }).catch(() => {});
+    this.idbGet('closedKeys').then(ck => { if (ck && ck.length) this.setState({ closedKeys: ck }); }).catch(() => {});
     this.loadAll();
 
     // Stay synced: re-pull the shared snapshot when the user returns to the app, plus a slow background refresh.
@@ -1663,7 +1673,12 @@ class Component extends DCLogic {
     try { localEmailed = (await this.idbGet('emailedKeys')) || []; } catch (e) {}
     const cloudEmailed = (cloud && Array.isArray(cloud.emailedKeys)) ? cloud.emailedKeys : [];
     const emailedKeys = [...new Set([...localEmailed, ...cloudEmailed])];
-    this.setState({ rows: allRows2, stored, imported, marketIntel, emailedKeys, loading: false, cloudLive: !!cloud, dataMeta: cloudTag + meta + ' · ' + rows.length.toLocaleString() + ' quotes' + importMeta });
+    // Merge closed-in-Fenevision keys (local + cloud) so the red check is consistent across devices
+    let localClosed = [];
+    try { localClosed = (await this.idbGet('closedKeys')) || []; } catch (e) {}
+    const cloudClosed = (cloud && Array.isArray(cloud.closedKeys)) ? cloud.closedKeys : [];
+    const closedKeys = [...new Set([...localClosed, ...cloudClosed])];
+    this.setState({ rows: allRows2, stored, imported, marketIntel, emailedKeys, closedKeys, loading: false, cloudLive: !!cloud, dataMeta: cloudTag + meta + ' · ' + rows.length.toLocaleString() + ' quotes' + importMeta });
   }
 
   normalize(payload) {
@@ -2073,6 +2088,8 @@ class Component extends DCLogic {
       if (sort === 'date_desc') return (b._sortDate||b.dateSerial||0) - (a._sortDate||a.dateSerial||0);
       if (sort === 'customer_asc') return (a.customer||'').localeCompare(b.customer||'');
       if (sort === 'division_asc') return (a.division||'zzz').localeCompare(b.division||'zzz') || (b.amount||0) - (a.amount||0);
+      if (sort === 'closed_asc') return (this.isClosed(a)?1:0) - (this.isClosed(b)?1:0) || (b.amount||0) - (a.amount||0);
+      if (sort === 'closed_desc') return (this.isClosed(b)?1:0) - (this.isClosed(a)?1:0) || (b.amount||0) - (a.amount||0);
       return 0;
     });
     return out;
@@ -2147,6 +2164,17 @@ class Component extends DCLogic {
   }
   emailKey(r) { return this._normQ(r.quoteNo) + '|' + (r.customer || '').trim().toLowerCase(); }
   isEmailed(r) { return (this.state.emailedKeys || []).indexOf(this.emailKey(r)) >= 0; }
+  isClosed(r) { return (this.state.closedKeys || []).indexOf(this.emailKey(r)) >= 0; }
+  toggleClosed = (r) => {
+    const k = this.emailKey(r);
+    const cur = this.state.closedKeys || [];
+    const on = cur.indexOf(k) < 0;
+    const closedKeys = on ? [...cur, k] : cur.filter(x => x !== k);
+    this.setState({ closedKeys });
+    this.idbSet('closedKeys', closedKeys).catch(() => {});
+    this.autoPublish && this.autoPublish(on ? { appendClosed: [k] } : { removeClosed: [k] });
+    this.toast(on ? 'Marked closed in Fenevision ✓' : 'Unmarked closed');
+  };
   estimatorEmailData() {
     return this.wonLostByEstimator().map(g => {
       const won = g.items.filter(r => /^won/i.test((r.answers || {}).outcome || '')).length;
@@ -3273,6 +3301,11 @@ class Component extends DCLogic {
         rep: r.rep || '—', loggedFmt: this.fmtTs(r.loggedAt), onView: () => this.openDetail(r),
         quotedBy: r.quotedBy || this.quotedByOf(r) || '—',
         emailed: this.isEmailed(r),
+        closed: this.isClosed(r),
+        closedMark: this.isClosed(r) ? '✓' : '',
+        closedBg: this.isClosed(r) ? '#fee2e2' : '#fff',
+        closedBorder: this.isClosed(r) ? '#dc2626' : '#cbd5d3',
+        onToggleClosed: () => this.toggleClosed(r),
         srcLabel: r.source === 'import' ? 'imported' : 'in-app',
         srcBg: r.source === 'import' ? '#eceadf' : '#e3eef0', srcColor: r.source === 'import' ? '#7a6326' : '#0a565f',
       }; });
