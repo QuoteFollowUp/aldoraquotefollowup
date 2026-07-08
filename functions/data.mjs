@@ -73,6 +73,15 @@ export default async (req) => {
       const cur = Array.isArray(merged.emailedKeys) ? merged.emailedKeys : [];
       merged.emailedKeys = [...new Set([...cur, ...incoming.appendEmailed])].slice(-20000);
     }
+    // Closed-in-Fenevision keys — add or remove (rep/estimator can toggle)
+    if (Array.isArray(incoming.appendClosed) && incoming.appendClosed.length) {
+      const cur = Array.isArray(merged.closedKeys) ? merged.closedKeys : [];
+      merged.closedKeys = [...new Set([...cur, ...incoming.appendClosed])].slice(-20000);
+    }
+    if (Array.isArray(incoming.removeClosed) && incoming.removeClosed.length) {
+      const rm = new Set(incoming.removeClosed);
+      merged.closedKeys = (Array.isArray(merged.closedKeys) ? merged.closedKeys : []).filter(k => !rm.has(k));
+    }
 
     merged.updatedAt = Date.now();
 
