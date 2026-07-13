@@ -53,6 +53,7 @@ export default async (req) => {
     if (incoming.quotes !== undefined) merged.quotes = incoming.quotes;
     if (incoming.log !== undefined) merged.log = incoming.log;
     if (incoming.marketIntel !== undefined) merged.marketIntel = incoming.marketIntel;
+    if (incoming.salesData !== undefined) merged.salesData = incoming.salesData;
 
     // Live appends from reps' phones — accumulate, de-dupe by uid, keep newest.
     const appendInto = (field, items, cap) => {
