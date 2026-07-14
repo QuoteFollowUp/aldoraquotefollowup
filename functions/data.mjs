@@ -68,6 +68,13 @@ export default async (req) => {
     appendInto("liveLog", incoming.appendLog, 12000);
     appendInto("marketIntel", incoming.appendMarket, 6000);
     appendInto("liveQuotes", incoming.appendVerbal, 6000);
+    appendInto("calls", incoming.appendCalls, 40000);
+
+    // Call attention-done keys (plain strings)
+    if (Array.isArray(incoming.appendAttnDone) && incoming.appendAttnDone.length) {
+      const cur = Array.isArray(merged.attnDoneKeys) ? merged.attnDoneKeys : [];
+      merged.attnDoneKeys = [...new Set([...cur, ...incoming.appendAttnDone])].slice(-20000);
+    }
 
     // Emailed-quote keys (plain strings) — accumulate as a de-duped set so no estimator is emailed twice.
     if (Array.isArray(incoming.appendEmailed) && incoming.appendEmailed.length) {
