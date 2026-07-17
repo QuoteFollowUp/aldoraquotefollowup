@@ -89,6 +89,17 @@ export default async (req) => {
     if (Array.isArray(incoming.removeClosed) && incoming.removeClosed.length) {
       const rm = new Set(incoming.removeClosed);
       merged.closedKeys = (Array.isArray(merged.closedKeys) ? merged.closedKeys : []).filter(k => !rm.has(k));
+      if (merged.closedDates && typeof merged.closedDates === "object") {
+        incoming.removeClosed.forEach((k) => { delete merged.closedDates[k]; });
+      }
+    }
+    // When each quote was marked closed — first write wins so the original date sticks
+    if (incoming.setClosedDates && typeof incoming.setClosedDates === "object") {
+      const cur = (merged.closedDates && typeof merged.closedDates === "object") ? merged.closedDates : {};
+      for (const [k, v] of Object.entries(incoming.setClosedDates)) {
+        if (typeof v === "string" && v && !cur[k]) cur[k] = v;
+      }
+      merged.closedDates = cur;
     }
 
     merged.updatedAt = Date.now();
