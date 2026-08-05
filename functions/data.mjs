@@ -54,6 +54,18 @@ export default async (req) => {
     if (incoming.log !== undefined) merged.log = incoming.log;
     if (incoming.marketIntel !== undefined) merged.marketIntel = incoming.marketIntel;
     if (incoming.salesData !== undefined) merged.salesData = incoming.salesData;
+    // Rep flags (vacation / in-office weeks, new-rep status) — merge per sub-map so one device's
+    // edit never erases another device's edit made since the last sync.
+    if (incoming.flags && typeof incoming.flags === "object") {
+      const curFlags = (merged.flags && typeof merged.flags === "object") ? merged.flags : {};
+      const nextFlags = { ...curFlags };
+      for (const sub of ["vacationWeeks", "officeWeeks", "newReps"]) {
+        if (incoming.flags[sub] && typeof incoming.flags[sub] === "object") {
+          nextFlags[sub] = { ...(curFlags[sub] || {}), ...incoming.flags[sub] };
+        }
+      }
+      merged.flags = nextFlags;
+    }
 
     // Live appends from reps' phones — accumulate, de-dupe by uid, keep newest.
     const appendInto = (field, items, cap) => {
