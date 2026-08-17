@@ -66,6 +66,20 @@ export default async (req) => {
       }
       merged.flags = nextFlags;
     }
+    // Explicit key removal — a plain merge above can only add/overwrite, never delete a key.
+    if (incoming.removeFlagKeys && typeof incoming.removeFlagKeys === "object") {
+      const curFlags = (merged.flags && typeof merged.flags === "object") ? merged.flags : {};
+      const nextFlags = { ...curFlags };
+      for (const sub of ["vacationWeeks", "officeWeeks", "newReps"]) {
+        const keys = incoming.removeFlagKeys[sub];
+        if (Array.isArray(keys) && keys.length) {
+          const m = { ...(nextFlags[sub] || {}) };
+          keys.forEach((k) => { delete m[k]; });
+          nextFlags[sub] = m;
+        }
+      }
+      merged.flags = nextFlags;
+    }
 
     // Live appends from reps' phones — accumulate, de-dupe by uid, keep newest.
     const appendInto = (field, items, cap) => {
