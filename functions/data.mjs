@@ -95,6 +95,7 @@ export default async (req) => {
     appendInto("marketIntel", incoming.appendMarket, 6000);
     appendInto("liveQuotes", incoming.appendVerbal, 6000);
     appendInto("calls", incoming.appendCalls, 40000);
+    appendInto("highFives", incoming.appendHighFives, 8000);
 
     // Call attention-done keys (plain strings)
     if (Array.isArray(incoming.appendAttnDone) && incoming.appendAttnDone.length) {
