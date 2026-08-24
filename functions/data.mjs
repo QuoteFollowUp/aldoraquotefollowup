@@ -96,6 +96,12 @@ export default async (req) => {
     appendInto("liveQuotes", incoming.appendVerbal, 6000);
     appendInto("calls", incoming.appendCalls, 40000);
     appendInto("highFives", incoming.appendHighFives, 8000);
+    // Edits to an existing High Five — replace in place by uid (appendInto skips known uids).
+    if (Array.isArray(incoming.updateHighFives) && incoming.updateHighFives.length) {
+      const cur = Array.isArray(merged.highFives) ? merged.highFives : [];
+      const byUid = new Map(incoming.updateHighFives.filter((x) => x && x.uid).map((x) => [x.uid, x]));
+      merged.highFives = cur.map((h) => (h && byUid.has(h.uid) ? { ...h, ...byUid.get(h.uid) } : h));
+    }
 
     // Call attention-done keys (plain strings)
     if (Array.isArray(incoming.appendAttnDone) && incoming.appendAttnDone.length) {
