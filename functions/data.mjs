@@ -96,6 +96,23 @@ export default async (req) => {
     appendInto("liveQuotes", incoming.appendVerbal, 6000);
     appendInto("calls", incoming.appendCalls, 40000);
     appendInto("highFives", incoming.appendHighFives, 8000);
+    // Likes — union/remove a single name on one High Five so concurrent likes from different
+    // devices don't clobber each other (a whole-object replace would).
+    if (Array.isArray(incoming.likeHighFives) && incoming.likeHighFives.length) {
+      const cur = Array.isArray(merged.highFives) ? merged.highFives : [];
+      merged.highFives = cur.map((h) => {
+        if (!h || !h.uid) return h;
+        let next = h;
+        incoming.likeHighFives.forEach((op) => {
+          if (!op || op.uid !== h.uid || !op.name) return;
+          const likes = Array.isArray(next.likes) ? next.likes : [];
+          const has = likes.some((n) => String(n).toLowerCase() === String(op.name).toLowerCase());
+          if (op.on && !has) next = { ...next, likes: [...likes, op.name] };
+          else if (!op.on && has) next = { ...next, likes: likes.filter((n) => String(n).toLowerCase() !== String(op.name).toLowerCase()) };
+        });
+        return next;
+      });
+    }
     // Edits to an existing High Five — replace in place by uid (appendInto skips known uids).
     if (Array.isArray(incoming.updateHighFives) && incoming.updateHighFives.length) {
       const cur = Array.isArray(merged.highFives) ? merged.highFives : [];
