@@ -59,7 +59,7 @@ export default async (req) => {
     if (incoming.flags && typeof incoming.flags === "object") {
       const curFlags = (merged.flags && typeof merged.flags === "object") ? merged.flags : {};
       const nextFlags = { ...curFlags };
-      for (const sub of ["vacationWeeks", "officeWeeks", "newReps"]) {
+      for (const sub of ["vacationWeeks", "officeWeeks", "newReps", "offDays"]) {
         if (incoming.flags[sub] && typeof incoming.flags[sub] === "object") {
           nextFlags[sub] = { ...(curFlags[sub] || {}), ...incoming.flags[sub] };
         }
@@ -70,7 +70,7 @@ export default async (req) => {
     if (incoming.removeFlagKeys && typeof incoming.removeFlagKeys === "object") {
       const curFlags = (merged.flags && typeof merged.flags === "object") ? merged.flags : {};
       const nextFlags = { ...curFlags };
-      for (const sub of ["vacationWeeks", "officeWeeks", "newReps"]) {
+      for (const sub of ["vacationWeeks", "officeWeeks", "newReps", "offDays"]) {
         const keys = incoming.removeFlagKeys[sub];
         if (Array.isArray(keys) && keys.length) {
           const m = { ...(nextFlags[sub] || {}) };
