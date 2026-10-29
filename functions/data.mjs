@@ -25,10 +25,12 @@ const codeMap = () => {
 };
 const titleName = (slug) => String(slug).split(/[-_\s]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
 const whoIs = (req) => {
-  const code = String(req.headers.get("x-access-code") || "").trim().toUpperCase();
+  // Dashes and spaces don't matter: "VCDR-TDMR", "vcdrtdmr" and "VCDR TDMR" all match.
+  const norm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const code = norm(req.headers.get("x-access-code"));
   if (!code) return null;
   const m = codeMap();
-  const hit = Object.keys(m).find((k) => k.trim().toUpperCase() === code);
+  const hit = Object.keys(m).find((k) => norm(k) === code);
   if (!hit) return null;
   const v = String(m[hit] || "").trim();
   if (!v) return null;
