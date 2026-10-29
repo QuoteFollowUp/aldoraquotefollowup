@@ -9,11 +9,53 @@ import zlib from "node:zlib";
 const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,OPTIONS",
-  "access-control-allow-headers": "content-type,x-sync-key",
+  "access-control-allow-headers": "content-type,x-sync-key,x-access-code,x-encoding",
+};
+
+// ---- Personal access codes ----
+// REP_ACCESS_CODES (Netlify env var) = JSON map of code -> who:
+//   "first-last"        a rep: sees only their own calls, quotes and scorecard
+//   "@branch:louisville" a branch manager: sees that branch's reps
+//   "@view" / "@all"    ownership: sees everything
+// Login is only enforced when LOGIN_REQUIRED is set to 1/true. Until then the app works as before.
+const loginRequired = () => /^(1|true|yes|on)$/i.test(String(process.env.LOGIN_REQUIRED || "").trim());
+const codeMap = () => {
+  const raw = process.env.REP_ACCESS_CODES || process.env.ACCESS_CODES || process.env.REP_CODES || "{}";
+  try { const m = JSON.parse(raw); return m && typeof m === "object" ? m : {}; } catch (e) { return {}; }
+};
+const titleName = (slug) => String(slug).split(/[-_\s]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+const whoIs = (req) => {
+  const code = String(req.headers.get("x-access-code") || "").trim().toUpperCase();
+  if (!code) return null;
+  const m = codeMap();
+  const hit = Object.keys(m).find((k) => k.trim().toUpperCase() === code);
+  if (!hit) return null;
+  const v = String(m[hit] || "").trim();
+  if (!v) return null;
+  // "@all" / "@all:first-last" = everything;  "@branch:louisville" or "@branch:louisville:first-last" = one branch
+  const a = v.match(/^@(view|all|owner|ownership|admin)(?::(.+))?$/i);
+  if (a) return { role: "all", label: a[2] ? titleName(a[2]) : "Ownership" };
+  const b = v.match(/^@branch:([^:]+)(?::(.+))?$/i);
+  if (b) return { role: "branch", branch: b[1].trim().toLowerCase().replace(/-/g, " "), label: (b[2] ? titleName(b[2]) + " · " : "") + titleName(b[1]) };
+  return { role: "rep", rep: titleName(v), label: titleName(v) };
 };
 
 export default async (req) => {
   const store = getStore("aldora-data");
+  const url = new URL(req.url);
+  const who = whoIs(req);
+  const required = loginRequired();
+
+  if (req.method === "GET" && url.searchParams.get("auth") === "check") {
+    return new Response(JSON.stringify({ required, ok: !!who, ...(who || {}) }), {
+      headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
+    });
+  }
+  if (required && req.method !== "OPTIONS" && !who) {
+    return new Response(JSON.stringify({ ok: false, error: "login-required" }), {
+      status: 401, headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
+    });
+  }
 
   if (req.method === "OPTIONS") {
     return new Response("", { headers: CORS });
