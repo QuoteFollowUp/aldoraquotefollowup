@@ -164,6 +164,17 @@ export default async (req) => {
       merged.highFives = cur.map((h) => (h && byUid.has(h.uid) ? { ...h, ...byUid.get(h.uid) } : h));
     }
 
+    // Reminders — insert or replace by uid (newest edit wins), so check-offs sync across devices.
+    if (Array.isArray(incoming.upsertReminders) && incoming.upsertReminders.length) {
+      const cur = Array.isArray(merged.reminders) ? merged.reminders : [];
+      const byUid = new Map(cur.filter((x) => x && x.uid).map((x) => [x.uid, x]));
+      incoming.upsertReminders.forEach((r) => {
+        if (!r || !r.uid) return;
+        const p = byUid.get(r.uid);
+        if (!p || (r.editedAt || r.createdAt || 0) >= (p.editedAt || p.createdAt || 0)) byUid.set(r.uid, r);
+      });
+      merged.reminders = [...byUid.values()].slice(-20000);
+    }
     // Call attention-done keys (plain strings)
     if (Array.isArray(incoming.appendAttnDone) && incoming.appendAttnDone.length) {
       const cur = Array.isArray(merged.attnDoneKeys) ? merged.attnDoneKeys : [];
