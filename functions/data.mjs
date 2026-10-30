@@ -37,6 +37,10 @@ const whoIs = (req) => {
   // "@all" / "@all:first-last" = everything;  "@branch:louisville" or "@branch:louisville:first-last" = one branch
   const a = v.match(/^@(view|all|owner|ownership|admin)(?::(.+))?$/i);
   if (a) return { role: "all", label: a[2] ? titleName(a[2]) : "Ownership" };
+  // "@reps:ben-gless+other-rep:manager-name" = a manager who sees only the listed reps
+  const t = v.match(/^@reps:([^:]+)(?::(.+))?$/i);
+  if (t) { const reps = t[1].split("+").map(s => titleName(s.trim())).filter(Boolean);
+    return { role: "team", reps, label: (t[2] ? titleName(t[2]) + " · " : "") + reps.join(", ") }; }
   const b = v.match(/^@branch:([^:]+)(?::(.+))?$/i);
   if (b) return { role: "branch", branch: b[1].trim().toLowerCase().replace(/-/g, " "), label: (b[2] ? titleName(b[2]) + " · " : "") + titleName(b[1]) };
   return { role: "rep", rep: titleName(v), label: titleName(v) };
