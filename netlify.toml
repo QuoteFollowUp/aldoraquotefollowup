@@ -14,3 +14,30 @@
   for = "/"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
+
+# Keep server code and config files off the public site (pages and /api/* still work).
+[[redirects]]
+  from = "/netlify/*"
+  to = "/not-found"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/package.json"
+  to = "/not-found"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/netlify.toml"
+  to = "/not-found"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/README.md"
+  to = "/not-found"
+  status = 404
+  force = true
+[[redirects]]
+  from = "/functions/*"
+  to = "/not-found"
+  status = 404
+  force = true

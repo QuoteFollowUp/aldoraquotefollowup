@@ -3225,6 +3225,19 @@ class Component extends DCLogic {
       return sc.role === 'branch' && !!sc.branch && (this._brNorm(x.branch) === sc.branch || this._brNorm(x.facility) === sc.branch || this._brNorm(x.home) === sc.branch); });
   }
   async checkAccess() {
+    // Signed in from the Sales Hub: the hub passes the Call Log code as #ac=... once. Save it, wipe it from the address bar.
+    try {
+      const hub = /[#&]ac=([^&]+)/.exec(location.hash || '');
+      if (hub) {
+        history.replaceState(null, '', location.pathname + location.search);
+        const c = decodeURIComponent(hub[1]).trim().toUpperCase();
+        const prev = this._savedAccess();
+        if (c && (!prev || String(prev.code || '').replace(/[^A-Z0-9]/gi, '') !== c.replace(/[^A-Z0-9]/gi, ''))) {
+          localStorage.setItem('aq_access', JSON.stringify({ code: c }));
+          try { sessionStorage.removeItem('aq_mgr'); } catch (e) {}
+        }
+      }
+    } catch (e) {}
     const saved = this._savedAccess();
     let st = null;
     try {
