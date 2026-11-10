@@ -3227,6 +3227,21 @@ class Component extends DCLogic {
       return sc.role === 'branch' && !!sc.branch && (this._brNorm(x.branch) === sc.branch || this._brNorm(x.facility) === sc.branch || this._brNorm(x.home) === sc.branch); });
   }
   async checkAccess() {
+    // Signed in from the Sales Hub: the hub passes the Call Log code as #ac=... once, plus an optional
+    // jump (#go=quote / rem / visit) to the record the hub row came from. Save both, wipe the address bar.
+    try {
+      const hp = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+      if (hp.get('ac') || hp.get('go')) {
+        history.replaceState(null, '', location.pathname + location.search);
+        const c = String(hp.get('ac') || '').trim().toUpperCase();
+        const prev = this._savedAccess();
+        if (c && (!prev || String(prev.code || '').replace(/[^A-Z0-9]/gi, '') !== c.replace(/[^A-Z0-9]/gi, ''))) {
+          localStorage.setItem('aq_access', JSON.stringify({ code: c }));
+          try { sessionStorage.removeItem('aq_mgr'); } catch (e) {}
+        }
+        if (hp.get('go')) { this._hubGo = { go: hp.get('go'), q: hp.get('q') || '', c: hp.get('c') || '', job: hp.get('job') || '', uid: hp.get('uid') || '', rep: hp.get('rep') || '', t: Date.now() }; this._hubJumpLoop(); }
+      }
+    } catch (e) {}
     const saved = this._savedAccess();
     let st = null;
     try {
@@ -3321,6 +3336,45 @@ class Component extends DCLogic {
     } catch (e) { return { ok: false, error: 'unreachable' }; }
   }
 
+  // Hub jump: wait for sign-in and data, then open the exact record. Gives up quietly after 30 seconds.
+  _hubJumpLoop() {
+    clearTimeout(this._hubGoT);
+    const g = this._hubGo;
+    if (!g) return;
+    const s = this.state;
+    const later = () => { if (Date.now() - g.t < 30000) this._hubGoT = setTimeout(() => this._hubJumpLoop(), 400); else this._hubGo = null; };
+    if (s.accessGate) return later();
+    const clear = { f_amtBands: [], f_customers: [], custSearch: '', f_min: '', f_max: '', f_month: '', f_facilities: [], f_division: '', f_quotedBy: '', f_outcome: '', f_days: '', f_daysLeft: '', f_product: '', page: 0,
+      ...(this._scope && this._scope.role === 'rep' ? {} : { f_rep: '' }) };
+    try {
+      if (g.go === 'quote') {
+        const nq = this._normQ(g.q), ck = String(g.c || '').trim().toLowerCase(), jk = String(g.job || '').trim().toLowerCase();
+        const recs = this.mergedLogged();
+        const rec = recs.find(r => nq && this._normQ(r.quoteNo) === nq && (!ck || String(r.customer || '').trim().toLowerCase() === ck))
+          || recs.find(r => nq && this._normQ(r.quoteNo) === nq)
+          || (!nq && jk ? recs.find(r => String(r.jobName || '').trim().toLowerCase() === jk && String(r.customer || '').trim().toLowerCase() === ck) : null);
+        if (rec) { this._hubGo = null; this.setState({ ...clear, view: 'logged', loggedInit: true, f_search: g.q || g.job || '', remOpen: false }); setTimeout(() => this.openDetail(rec), 60); return; }
+        if (!recs.length) return later();
+        // Verbal quote or not merged yet: open Open Quotes searched to it
+        this._hubGo = null; this.setState({ ...clear, view: 'open', f_search: g.q || g.job || '', remOpen: false }); return;
+      }
+      if (g.go === 'rem') {
+        const r = (s.reminders || []).find(x => x && x.uid === g.uid);
+        if (!r) return later();
+        this._hubGo = null;
+        this.setState({ remOpen: true, remDetail: r.uid, remFormOpen: false, rem_rep: '', ...(this._remPickMode() ? { f_rep: this.normalizeRep(r.rep || '') } : {}) }); return;
+      }
+      if (g.go === 'visit') {
+        // Account gone quiet: open a new Visit reminder already filled in for that customer
+        this._hubGo = null;
+        this._rf = { customer: g.c };
+        const rep = this._scope && this._scope.role === 'rep' ? this._scope.rep : this.normalizeRep(g.rep || '');
+        this.setState({ remOpen: true, remDetail: null, remFormOpen: true, rfErr: '', rf_type: 'Visit', rf_date: '', rf_rep: rep });
+        return;
+      }
+    } catch (e) {}
+    this._hubGo = null;
+  }
   componentDidMount() {
     try {
       this.louisvilleRepsReady();
@@ -9479,7 +9533,7 @@ class Component extends DCLogic {
           remEmpty: list.length === 0, remDoneLabel: s.remShowDone ? 'Hide completed' : 'Show completed',
           toggleRemDone: () => this.setState({ remShowDone: !s.remShowDone }), printReminders: this.printReminders,
           remFormOpen: !!s.remFormOpen, openRemForm: this.openRemForm, closeRemForm: this.closeRemForm, saveRemForm: this.saveRemForm,
-          rf_customer: '', rf_note: '', rf_type: s.rf_type || this.REM_TYPES[0], rf_date: s.rf_date || '',
+          rf_customer: (this._rf && this._rf.customer) || '', rf_note: '', rf_type: s.rf_type || this.REM_TYPES[0], rf_date: s.rf_date || '',
           onRfCustomer: this.onRfCustomer, onRfNote: this.onRfNote, onRfRep: this.onRfRep, onRfType: this.onRfType, onRfDate: this.onRfDate,
           rfErr: s.rfErr || '', hasRfErr: !!s.rfErr, remCustOptions: custs,
           nc_remOn: !!s.nc_remOn, onNcRemOn: this.onNcRemOn, nc_remType: s.nc_remType || this.REM_TYPES[0], onNcRemType: this.onNcRemType,
