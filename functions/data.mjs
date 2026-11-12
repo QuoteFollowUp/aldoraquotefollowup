@@ -32,7 +32,10 @@ const whoIs = (req) => {
   const m = codeMap();
   const hit = Object.keys(m).find((k) => norm(k) === code);
   if (!hit) return null;
-  const v = String(m[hit] || "").trim();
+  return parseWho(m[hit]);
+};
+const parseWho = (raw) => {
+  const v = String(raw || "").trim();
   if (!v) return null;
   // "@all" / "@all:first-last" = everything;  "@branch:louisville" or "@branch:louisville:first-last" = one branch
   const a = v.match(/^@(view|all|owner|ownership|admin)(?::(.+))?$/i);
@@ -46,11 +49,52 @@ const whoIs = (req) => {
   return { role: "rep", rep: titleName(v), label: titleName(v) };
 };
 
+// ---- Usage log ----
+// One record per person per day (Eastern time): how many times they opened each app, first/last time.
+// Kept in its own blob so it never slows down the main snapshot. 400 days are kept.
+const dayET = (ms) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(ms));
+const logUsage = async (store, who, app) => {
+  if (!who) return;
+  const now = Date.now(), day = dayET(now);
+  let u = {};
+  try { u = JSON.parse((await store.get("usage", { type: "text" })) || "{}"); } catch (e) {}
+  const days = (u.days && typeof u.days === "object") ? u.days : {};
+  const key = who.label || who.rep || "Unknown";
+  const today = days[day] || (days[day] = {});
+  const rec = today[key] || (today[key] = { n: 0, first: now, last: now, role: who.role, apps: {} });
+  rec.n++; rec.last = now; rec.role = who.role;
+  const a = String(app || "quote-followup").slice(0, 40);
+  rec.apps[a] = (rec.apps[a] || 0) + 1;
+  const cutoff = dayET(now - 400 * 86400000);
+  Object.keys(days).forEach((k) => { if (k < cutoff) delete days[k]; });
+  await store.set("usage", JSON.stringify({ days }));
+};
+const isFred = (who) => !!who && who.role === "all" && /fred\s*haas/i.test(who.label || "");
+
 export default async (req) => {
   const store = getStore("aldora-data");
   const url = new URL(req.url);
   const who = whoIs(req);
   const required = loginRequired();
+  const JSONH = { "content-type": "application/json", "cache-control": "no-store", ...CORS };
+
+  // Usage ping: the app calls this once each time it's opened (other Aldora apps can call it too
+  // with &app=their-name and the same x-access-code header).
+  if (req.method === "GET" && url.searchParams.get("usage") === "open") {
+    try { await logUsage(store, who, url.searchParams.get("app")); } catch (e) {}
+    return new Response(JSON.stringify({ ok: !!who }), { headers: JSONH });
+  }
+  // Usage report: Fred only.
+  if (req.method === "GET" && url.searchParams.get("usage") === "report") {
+    if (!isFred(who)) return new Response(JSON.stringify({ ok: false, error: "forbidden" }), { status: 403, headers: JSONH });
+    let u = {};
+    try { u = JSON.parse((await store.get("usage", { type: "text" })) || "{}"); } catch (e) {}
+    const from = url.searchParams.get("from") || "0000-00-00", to = url.searchParams.get("to") || "9999-99-99";
+    const days = {};
+    Object.entries((u.days || {})).forEach(([k, v]) => { if (k >= from && k <= to) days[k] = v; });
+    const roster = Object.values(codeMap()).map(parseWho).filter(Boolean).map((w) => ({ label: w.label || w.rep, role: w.role }));
+    return new Response(JSON.stringify({ ok: true, days, roster }), { headers: JSONH });
+  }
 
   if (req.method === "GET" && url.searchParams.get("auth") === "check") {
     return new Response(JSON.stringify({ required, ok: !!who, ...(who || {}) }), {
