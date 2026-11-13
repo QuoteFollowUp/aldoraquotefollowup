@@ -2359,6 +2359,12 @@
             <div style="font-size:11.5px;font-style:italic;color:#c0392b;margin-top:6px;">If so, be sure to log through the “Verbal Quote Entry” tab to track.</div>
           </div>
           <div style="margin-bottom:14px;"><label style="display:block;font-size:12.5px;font-weight:700;color:#16211f;margin-bottom:5px;">Notes / Market Pulse</label>
+            <sc-if value="{{ nc_priceNudge }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-bottom:8px;padding:10px 12px;border:1px solid #e6c56b;border-left:5px solid #c9a24a;border-radius:8px;background:#fdf8ea;">
+                <div style="font-size:13px;font-weight:800;color:#7a5a0f;">You checked Price. What pricing issue is stopping them from buying?</div>
+                <div style="font-size:12.5px;color:#5c4a1a;margin-top:4px;line-height:1.45;">"Too expensive" is not a reason. Give specifics: who we are losing to, their price and surcharge, our price, the volume at stake, and what it would take to win it.</div>
+              </div>
+            </sc-if>
             <textarea defaultValue="{{ nc_pulse }}" onInput="{{ onNcPulse }}" placeholder="What happened on the call…" style="outline:{{ ncOlNotes }};outline-offset:1px;width:100%;box-sizing:border-box;font-size:14px;padding:10px 12px;border:1px solid #d6dedd;border-radius:8px;background:#fcfdfd;min-height:90px;resize:vertical;"></textarea>
           </div>
           <div style="margin-bottom:14px;padding:12px 14px;border:1px solid #cfe0e0;border-radius:9px;background:#f2f8f8;">
@@ -5726,8 +5732,8 @@ class Component extends DCLogic {
   nextCallPage = () => this.setState(s => ({ callPage: s.callPage + 1 }));
   // Typed text is buffered on the instance (no per-keystroke re-render of the whole app — that was making notes entry sluggish)
   _nc = {}; _fa = {}; _femail = null; _mia = {}; _micust = null;
-  openCallForm = () => { this._ncWarned = false; this.setState({ nc_tried: false }); if (this._scope && this._scope.role === 'rep') setTimeout(() => this.setState({ nc_rep: this._scope.rep, nc_branch: this.CALL_REP_BRANCH[this._scope.rep] || this.state.nc_branch }), 0); this.setState({ nc_remOn: false, nc_remDate: '', nc_remType: '', nc_facAns: '', nc_noteFacility: '', nc_attnKind: '', nc_attnMetalFac: '' }); this._nc = {}; this._ncTouched = {}; this._lastApplied = ''; this._editUid = null; this.loadAccounts(); let remembered = ''; try { remembered = localStorage.getItem('aq_rep') || ''; } catch (e) {} this.setState({ ncMatched: false, nc_opps: [], nc_addls: [], nc_barriers: [], barrierSeed: Date.now() % 1e6, nc_notToday: false, nc_callDate: '', nc_existing: false, nc_prospect: false, ncCustQuery: '', ncCustOpen: false, ncPrevCall: '', callFormOpen: true, callFormErr: '', nc_rep: this.state.f_rep || remembered || '', nc_branch: '', nc_customer: '', nc_contact: '', nc_opp: '', nc_pulse: '', nc_isNew: false, nc_email: '', nc_phone: '', nc_acctType: '', nc_highPri: false, nc_cold: false, nc_phoneCall: false, nc_addlCats: '', nc_barrier: '', nc_wereQuoted: false, nc_qJob: '', nc_qProduct: '', nc_qPrice: '', nc_attention: '' }); };
-  closeCallForm = () => { this._ncWarned = false; this.setState({ callFormOpen: false, nc_tried: false, ncHist: [] }); };
+  openCallForm = () => { this._ncWarned = false; this._ncPriceWarned = false; this.setState({ nc_tried: false }); if (this._scope && this._scope.role === 'rep') setTimeout(() => this.setState({ nc_rep: this._scope.rep, nc_branch: this.CALL_REP_BRANCH[this._scope.rep] || this.state.nc_branch }), 0); this.setState({ nc_remOn: false, nc_remDate: '', nc_remType: '', nc_facAns: '', nc_noteFacility: '', nc_attnKind: '', nc_attnMetalFac: '' }); this._nc = {}; this._ncTouched = {}; this._lastApplied = ''; this._editUid = null; this.loadAccounts(); let remembered = ''; try { remembered = localStorage.getItem('aq_rep') || ''; } catch (e) {} this.setState({ ncMatched: false, nc_opps: [], nc_addls: [], nc_barriers: [], barrierSeed: Date.now() % 1e6, nc_notToday: false, nc_callDate: '', nc_existing: false, nc_prospect: false, ncCustQuery: '', ncCustOpen: false, ncPrevCall: '', callFormOpen: true, callFormErr: '', nc_rep: this.state.f_rep || remembered || '', nc_branch: '', nc_customer: '', nc_contact: '', nc_opp: '', nc_pulse: '', nc_isNew: false, nc_email: '', nc_phone: '', nc_acctType: '', nc_highPri: false, nc_cold: false, nc_phoneCall: false, nc_addlCats: '', nc_barrier: '', nc_wereQuoted: false, nc_qJob: '', nc_qProduct: '', nc_qPrice: '', nc_attention: '' }); };
+  closeCallForm = () => { this._ncWarned = false; this._ncPriceWarned = false; this.setState({ callFormOpen: false, nc_tried: false, ncHist: [] }); };
   // The reps who log calls, and the facility each belongs to. Picking a name fills the branch.
   CALL_REP_BRANCH = {
     'Steve Crum': 'Louisville', 'Jim Wanamaker': 'Louisville', 'Christian Kelley': 'Louisville',
@@ -7468,6 +7474,10 @@ class Component extends DCLogic {
       this._ncWarned = true;
       return this.setState({ nc_tried: true, callFormErr: 'Missing: ' + _missNames.join(', ') + '. These are outlined in red. Fill them in, or tap Save again to save anyway.' });
     }
+    if ((s.nc_barriers || []).some(b => /^price$/i.test(b)) && !/\d/.test(String(s.nc_pulse || '')) && !this._ncPriceWarned) {
+      this._ncPriceWarned = true;
+      return this.setState({ callFormErr: 'Price is checked but your notes have no numbers. Add who we are losing to, their price, our price and the volume at stake. Tap Save again to save anyway.' });
+    }
     if (!s.nc_rep) return this.setState({ callFormErr: 'Choose a sales rep.' });
     if (!s.nc_customer.trim()) return this.setState({ callFormErr: 'Customer is required.' });
     if (!this._editUid && !(s.nc_isNew || s.nc_cold || s.nc_prospect) && !this._ncKnownCustomer(s.nc_rep, s.nc_customer))
@@ -7872,7 +7882,7 @@ class Component extends DCLogic {
     this._editRec = c;
     this._ncPrev = { nc_contact: c.contactName || '', nc_email: c.contactEmail || '', nc_pulse: c.pulse || '' };
     this.loadAccounts();
-    this._ncWarned = false;
+    this._ncWarned = false; this._ncPriceWarned = false;
     this.setState({ nc_tried: true,
       callDetail: null, callFormOpen: true, callFormErr: '', ncMatched: false, ncPrevCall: '', ncCustOpen: false, ncCustQuery: c.customer || '',
       ncHist: this.custHistory(c.customer, c.uid), ncHistOpen: false,
@@ -9797,6 +9807,7 @@ class Component extends DCLogic {
       nc_notToday: !!s.nc_notToday, onNcNotToday: this.onNcNotToday,
       nc_attnGlass: s.nc_attnKind === 'Glass', nc_attnMetal: s.nc_attnKind === 'Metal', onNcAttnGlass: this.onNcAttnGlass, onNcAttnMetal: this.onNcAttnMetal,
       nc_attnMetalFac: s.nc_attnMetalFac || '', onNcAttnMetalFac: this.onNcAttnMetalFac,
+      nc_priceNudge: (s.nc_barriers || []).some(b => /^price$/i.test(b)),
       nc_facYes: s.nc_facAns === 'Yes', nc_facNo: s.nc_facAns === 'No', onNcFacYes: this.onNcFacYes, onNcFacNo: this.onNcFacNo,
       nc_noteFacility: s.nc_noteFacility || '', onNcNoteFac: this.onNcNoteFac, noteFacOptions: this.CALL_OPTS.branch,
       nc_callDate: s.nc_callDate || '', onNcCallDate: this.onNcCallDate, nc_todayIso: this._isoToday(),
