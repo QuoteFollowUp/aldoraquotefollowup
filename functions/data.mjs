@@ -143,7 +143,22 @@ export default async (req) => {
 
     const merged = { ...existing };
     if (incoming.quotes !== undefined) merged.quotes = incoming.quotes;
-    if (incoming.log !== undefined) merged.log = incoming.log;
+    // Follow-up history only ever grows: a device with fewer records can't wipe out what others sent.
+    // Clearing on purpose sends _meta "cleared".
+    if (incoming.log !== undefined) {
+      const cur = (existing.log && Array.isArray(existing.log.records)) ? existing.log.records : [];
+      const inc = (incoming.log && Array.isArray(incoming.log.records)) ? incoming.log.records : [];
+      if (incoming.log && incoming.log._meta === "cleared") merged.log = incoming.log;
+      else {
+        const k = (r) => { const a = (r && r.answers) || {};
+          const q = String((r && (r.quoteNo || r.quote)) || "").toUpperCase().replace(/[^A-Z0-9]/g, "") || String((r && r.customer) || "").toLowerCase();
+          const n = String((r && r.notes) || a.notes || a.details || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 80);
+          return q + "|" + String(a.outcome || "").toLowerCase() + "|" + n; };
+        const seen = new Set(), out = [];
+        for (const r of [...inc, ...cur]) { if (!r) continue; const kk = k(r); if (seen.has(kk)) continue; seen.add(kk); out.push(r); }
+        merged.log = { ...(incoming.log || {}), records: out };
+      }
+    }
     if (incoming.marketIntel !== undefined) merged.marketIntel = incoming.marketIntel;
     if (incoming.salesData !== undefined) merged.salesData = incoming.salesData;
     // Rep flags (vacation / in-office weeks, new-rep status) — merge per sub-map so one device's
