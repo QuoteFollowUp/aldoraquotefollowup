@@ -49,22 +49,30 @@
     }
     return { L: findLogic(), timeout: true };
   }
-  // Open one quote straight from the Sales Hub ("Biggest opportunities this week" and other hub links):
-  //   #ac=CODE&go=quote&q=QUOTE#&c=CUSTOMER&job=JOB
-  // Signs this device in with the hub's code, waits for the quotes to load, then opens the quote:
-  // a logged quote opens its follow-up record on Logged Follow-Ups; a quote not logged yet (or a
-  // verbal quote) opens the Open Quotes list narrowed to it. If it isn't found, the list is still
-  // narrowed to that quote # so nothing is lost.
+  // Open one record straight from the Sales Hub:
+  //   #ac=CODE&go=quote&q=QUOTE#&c=CUSTOMER&job=JOB   Biggest opportunities: the quote's follow-up record
+  //                                                     (or Open Quotes narrowed to it)
+  //   #ac=CODE&go=rem&uid=UID                           Accounts due a visit, scheduled or overdue: that reminder
+  //   #ac=CODE&go=visit&c=CUSTOMER&rep=REP              Accounts due a visit, gone quiet: a new Visit reminder
+  //                                                     for that customer and rep, ready to pick a date
+  // Sign-in: a device that isn't signed in takes the hub's code. A device already signed in keeps its
+  // own sign-in, so opening a rep's record while viewing as that rep in the hub never turns this
+  // device into that rep. (A sign-in that came from an earlier hub link is replaced.)
   var GO = null;
   try {
     var gh = location.hash || "";
-    if (/(?:^#|&)go=quote(?:&|$)/.test(gh) && !/(?:^#|&)hubjob=1(?:&|$)/.test(gh)) {
+    var gm = /(?:^#|&)go=(quote|rem|visit)(?:&|$)/.exec(gh);
+    if (gm && !/(?:^#|&)hubjob=1(?:&|$)/.test(gh)) {
       var gp = new URLSearchParams(gh.slice(1));
-      GO = { q: gp.get("q") || "", c: gp.get("c") || "", job: gp.get("job") || "" };
+      GO = { go: gm[1], q: gp.get("q") || "", c: gp.get("c") || "", job: gp.get("job") || "", uid: gp.get("uid") || "", rep: gp.get("rep") || "" };
       var gc = gp.get("ac");
       if (gc) {
         var sv = null; try { sv = JSON.parse(localStorage.getItem("aq_access") || "null"); } catch (e) {}
-        if (!sv || sv.code !== gc) localStorage.setItem("aq_access", JSON.stringify({ code: gc }));
+        var fromHub = localStorage.getItem("aq_access_hub") === "1";
+        if (!sv || !sv.code || (fromHub && sv.code !== gc)) {
+          localStorage.setItem("aq_access", JSON.stringify({ code: gc }));
+          localStorage.setItem("aq_access_hub", "1");
+        }
       }
       history.replaceState(null, "", location.pathname + location.search);
     }
@@ -87,6 +95,8 @@
     var r = await readyLogic();
     var L = r.L;
     if (!L || r.gate || r.timeout) return;
+    if (go.go === "rem") return openReminder(L, go);
+    if (go.go === "visit") return newVisit(L, go);
     var find = go.q || go.job;
     var clear = { page: 0, f_search: find, f_customers: [], f_outcome: "", f_month: "", f_facilities: [], f_division: "", f_quotedBy: "", f_product: "", f_amtBands: [], f_min: "", f_max: "", f_days: "" };
     try {
@@ -97,6 +107,40 @@
         return;
       }
       L.setState(Object.assign({ view: "open" }, clear));
+    } catch (e) {}
+  }
+  // A visit reminder: open Reminders with that reminder's card open
+  async function openReminder(L, go) {
+    try {
+      L.setState({ remOpen: true, rem_rep: "" });
+      // Reminders can arrive a moment after the quotes
+      for (var i = 0; i < 60; i++) {
+        var r = (L.state.reminders || []).find(function (x) { return x && !x.deleted && String(x.uid) === go.uid; });
+        if (r) { L.setState({ remDetail: r.uid, remReschedOpen: false, remNewDate: "" }); return; }
+        await sleep(250);
+      }
+    } catch (e) {}
+  }
+  // An account gone quiet: open a new Visit reminder for that customer and rep, ready to pick a date
+  function newVisit(L, go) {
+    try {
+      var rep = typeof L.normalizeRep === "function" ? L.normalizeRep(go.rep) : go.rep;
+      L.setState({ remOpen: true, rem_rep: "" });
+      L.openRemForm();
+      setTimeout(function () {
+        try {
+          L.setState({ rf_type: "Visit", rf_rep: (L._scope && L._scope.role === "rep") ? L._scope.rep : rep });
+          L._rf = Object.assign({}, L._rf || {}, { customer: go.c });
+          var tries = 0;
+          (function fill() {
+            var inp = document.querySelector('input[list="rem-custs"]');
+            if (!inp && tries++ < 40) { setTimeout(fill, 100); return; }
+            if (inp) { inp.value = go.c; L._rf.customer = go.c; }
+            var d = document.querySelector('input[type="date"]');
+            if (d) try { d.focus(); } catch (e) {}
+          })();
+        } catch (e) {}
+      }, 60);
     } catch (e) {}
   }
   if (GO) openFromHub(GO);
