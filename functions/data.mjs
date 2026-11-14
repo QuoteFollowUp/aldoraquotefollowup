@@ -188,13 +188,19 @@ export default async (req) => {
       merged.flags = nextFlags;
     }
 
-    // Live appends from reps' phones — accumulate, de-dupe by uid, keep newest.
+    // Live appends from reps' phones — one record per uid. When the same uid comes in again
+    // (an edit), the newer version replaces the old one. "Newer" = later editedAt/updatedAt/loggedAt.
+    const stamp = (x) => Math.max(+(x && x.editedAt) || 0, +(x && x.updatedAt) || 0, +(x && x.deletedAt) || 0, +(x && x.loggedAt) || 0, +(x && x.at) || 0);
     const appendInto = (field, items, cap) => {
       if (!Array.isArray(items) || !items.length) return;
-      const cur = Array.isArray(merged[field]) ? merged[field] : [];
-      const seen = new Set(cur.map((x) => x && x.uid).filter(Boolean));
-      const add = items.filter((x) => x && x.uid && !seen.has(x.uid));
-      let next = [...cur, ...add];
+      const cur = Array.isArray(merged[field]) ? merged[field].slice() : [];
+      const pos = new Map(); cur.forEach((x, i) => { if (x && x.uid) pos.set(x.uid, i); });
+      for (const x of items) {
+        if (!x || !x.uid) continue;
+        if (pos.has(x.uid)) { const i = pos.get(x.uid); if (stamp(x) >= stamp(cur[i])) cur[i] = x; }
+        else { pos.set(x.uid, cur.length); cur.push(x); }
+      }
+      let next = cur;
       if (cap && next.length > cap) next = next.slice(next.length - cap);
       merged[field] = next;
     };
