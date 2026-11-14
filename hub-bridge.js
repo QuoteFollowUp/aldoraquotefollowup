@@ -10,7 +10,7 @@
    Only the Aldora Sales Hub (aldora*.netlify.app) can ask, and only a company-wide code. */
 (function () {
   "use strict";
-  // Sign-in for the hub's hidden frame only (#hubjob=1&ac=CODE). Normal visits are untouched.
+  // Sign-in for the hub's hidden frame (#hubjob=1&ac=CODE). Hub links to one quote are handled below.
   try {
     var h = location.hash || "";
     if (/(?:^#|&)hubjob=1(?:&|$)/.test(h)) {
@@ -49,6 +49,58 @@
     }
     return { L: findLogic(), timeout: true };
   }
+  // Open one quote straight from the Sales Hub ("Biggest opportunities this week" and other hub links):
+  //   #ac=CODE&go=quote&q=QUOTE#&c=CUSTOMER&job=JOB
+  // Signs this device in with the hub's code, waits for the quotes to load, then opens the quote:
+  // a logged quote opens its follow-up record on Logged Follow-Ups; a quote not logged yet (or a
+  // verbal quote) opens the Open Quotes list narrowed to it. If it isn't found, the list is still
+  // narrowed to that quote # so nothing is lost.
+  var GO = null;
+  try {
+    var gh = location.hash || "";
+    if (/(?:^#|&)go=quote(?:&|$)/.test(gh) && !/(?:^#|&)hubjob=1(?:&|$)/.test(gh)) {
+      var gp = new URLSearchParams(gh.slice(1));
+      GO = { q: gp.get("q") || "", c: gp.get("c") || "", job: gp.get("job") || "" };
+      var gc = gp.get("ac");
+      if (gc) {
+        var sv = null; try { sv = JSON.parse(localStorage.getItem("aq_access") || "null"); } catch (e) {}
+        if (!sv || sv.code !== gc) localStorage.setItem("aq_access", JSON.stringify({ code: gc }));
+      }
+      history.replaceState(null, "", location.pathname + location.search);
+    }
+  } catch (e) { GO = null; }
+
+  var normQ = function (v) { return String(v || "").toUpperCase().replace(/\s+/g, "").replace(/[^A-Z0-9-]/g, ""); };
+  var normC = function (v) { return String(v || "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").replace(/\b(inc|llc|co|corp|the)\b/g, " ").replace(/\s+/g, " ").trim(); };
+  function pick(list, go) {
+    var qn = normQ(go.q), cn = normC(go.c), jn = String(go.job || "").trim().toLowerCase();
+    var hits = (list || []).filter(function (r) {
+      if (!r) return false;
+      if (qn) return normQ(r.quoteNo) === qn;
+      return cn && normC(r.customer) === cn && jn && String(r.jobName || "").trim().toLowerCase() === jn;
+    });
+    if (hits.length > 1 && cn) { var same = hits.filter(function (r) { return normC(r.customer) === cn; }); if (same.length) hits = same; }
+    hits.sort(function (a, b) { return (b.loggedAt || 0) - (a.loggedAt || 0); });
+    return hits[0] || null;
+  }
+  async function openFromHub(go) {
+    var r = await readyLogic();
+    var L = r.L;
+    if (!L || r.gate || r.timeout) return;
+    var find = go.q || go.job;
+    var clear = { page: 0, f_search: find, f_customers: [], f_outcome: "", f_month: "", f_facilities: [], f_division: "", f_quotedBy: "", f_product: "", f_amtBands: [], f_min: "", f_max: "", f_days: "" };
+    try {
+      var logged = pick(typeof L.mergedLogged === "function" ? L.mergedLogged() : [], go);
+      if (logged) {
+        L.setState(Object.assign({ view: "logged", loggedInit: true }, clear));
+        setTimeout(function () { try { L.openDetail(logged); } catch (e) {} }, 50);
+        return;
+      }
+      L.setState(Object.assign({ view: "open" }, clear));
+    } catch (e) {}
+  }
+  if (GO) openFromHub(GO);
+
   // Wait for the publish that the app starts after each upload
   async function waitPush(L) {
     for (var i = 0; i < 480; i++) {
