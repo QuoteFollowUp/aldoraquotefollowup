@@ -225,3 +225,135 @@
     }
   });
 })();
+
+/* Account lists shared with the Sales Hub (Nov 15 2026). The hub (/api/account-flags) decides what is
+   on each rep's account list; this keeps the Call Log in step:
+   1. Approved changes: accounts Fred confirmed are not the rep's come off the rep's list here (customer
+      picker, "your accounts", quotes on the list); approved new accounts go on it.
+   2. New customers: when a rep logs a call with "New customer" checked for a customer that is not on
+      their list, the customer, contact, phone and email go to Fred to approve. Once he does, the account
+      is on the rep's list in every app (Call Log, My Territory, Hub Home, Card File, Quote Trends).
+   3. 90 days: the customer picker marks accounts with no call logged in 90+ days, and accounts flagged
+      as not the rep's while Fred decides. */
+(function () {
+  "use strict";
+  var HUB = "https://aldora-sales-hub.netlify.app";
+  var QUIET = 90, DAY = 86400000;
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  var repKey = function (r) { return String(r || "").toLowerCase().replace(/[^a-z]/g, "").replace(/(.)\1/g, "$1"); };
+  var changes = null, lastSync = 0;
+  function code() { try { var a = JSON.parse(localStorage.getItem("aq_access") || "null"); return a && a.code ? a.code : ""; } catch (e) { return ""; } }
+  function logic() {
+    var els = document.querySelectorAll("body *");
+    for (var i = 0; i < els.length && i < 600; i++) {
+      var el = els[i], k = null;
+      for (var key in el) { if (key.indexOf("__reactFiber$") === 0 || key.indexOf("__reactInternalInstance$") === 0) { k = key; break; } }
+      if (!k) continue;
+      for (var f = el[k]; f; f = f.return) { var s = f.stateNode; if (s && s.logic && typeof s.logic.publishCalls === "function" && s.logic.REP_ACCOUNTS) return s.logic; }
+    }
+    return null;
+  }
+
+  // 1. Apply the hub's approved changes to the Call Log's account lists (from the original lists every time)
+  function applyLists(L) {
+    if (!changes) return;
+    if (!L.__origAccounts) L.__origAccounts = JSON.parse(JSON.stringify(L.REP_ACCOUNTS));
+    var out = JSON.parse(JSON.stringify(L.__origAccounts));
+    Object.keys(changes).forEach(function (hubRep) {
+      var ch = changes[hubRep], rk = repKey(hubRep);
+      var key = Object.keys(out).find(function (r) { return repKey(r) === rk; }) || L.normalizeRep(hubRep);
+      var list = out[key] || (out[key] = []);
+      var gone = new Set((ch.remove || []).map(function (n) { return L._acctKey(n); }));
+      list = list.filter(function (n) { return !gone.has(L._acctKey(n)); });
+      var have = new Set(list.map(function (n) { return L._acctKey(n); }));
+      (ch.add || []).forEach(function (n) { if (!have.has(L._acctKey(n))) { list.push(n); have.add(L._acctKey(n)); } });
+      out[key] = list;
+    });
+    L.REP_ACCOUNTS = out;
+    L._repAcctCache = {};
+  }
+  async function sync(L, force) {
+    var c = code(); if (!c) return;
+    if (!force && Date.now() - lastSync < 300000) return;
+    lastSync = Date.now();
+    try {
+      var r = await fetch(HUB + "/api/account-flags?lists=1", { headers: { "x-hub-code": c } });
+      if (!r.ok) return;
+      var d = await r.json();
+      changes = d.changes || {};
+      applyLists(L);
+      if (L.forceUpdate) L.forceUpdate(); else if (L.setState) L.setState({});
+    } catch (e) {}
+  }
+
+  // 2. New customer on a logged call -> request to add it to the rep's list
+  var SENT = "aq_hub_adds";
+  function sent() { try { return JSON.parse(localStorage.getItem(SENT) || "{}"); } catch (e) { return {}; } }
+  async function requestAdd(L, rec) {
+    var k = repKey(rec.rep) + "|" + L._acctKey(rec.customer), s = sent();
+    if (s[k]) return;
+    if (L.repAcctKeys(rec.rep).has(L._acctKey(rec.customer))) return;
+    try {
+      var r = await fetch(HUB + "/api/account-flags", { method: "POST", headers: { "x-hub-code": code(), "content-type": "application/json" },
+        body: JSON.stringify({ action: "add", rep: rec.rep, account: rec.customer, contact: rec.contactName || "", email: rec.contactEmail || "", phone: rec.contactPhone || "", source: "Call Log" }) });
+      var d = await r.json().catch(function () { return {}; });
+      if (!r.ok) return;
+      s[k] = Date.now(); try { localStorage.setItem(SENT, JSON.stringify(s)); } catch (e) {}
+      if (d.pending && L.toast) setTimeout(function () { L.toast(rec.customer + " sent to Fred to add to your account list."); }, 3000);
+    } catch (e) {}
+  }
+  function hookPublish(L) {
+    if (L.__hubPublish) return;
+    var orig = L.publishCalls;
+    L.__hubPublish = true;
+    L.publishCalls = function (list) {
+      var res = orig.apply(this, arguments);
+      try { (list || []).forEach(function (rec) { if (rec && !rec.deleted && /^yes$/i.test(rec.isNew || "") && rec.customer && rec.rep) requestAdd(L, rec); }); } catch (e) {}
+      return res;
+    };
+  }
+
+  // 3. Customer picker: no call in 90+ days, and flagged as not the rep's
+  function hookPicker(L) {
+    if (L.__hubPicker) return;
+    var orig = L.ncCustomerPicker;
+    L.__hubPicker = true;
+    L.ncCustomerPicker = function () {
+      var out = orig.apply(this, arguments);
+      try {
+        var rep = L.normalizeRep(L.state.nc_rep || ""); if (!rep || !out || !out.ncCustMatches) return out;
+        var last = {}, pend = new Set();
+        (L._callsFull || L.state.calls || []).forEach(function (c) {
+          if (!c || c.deleted || L.normalizeRep(c.rep || "") !== rep) return;
+          var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(c.date || "")); // the call date, not when it was typed in
+          var t = m ? Date.UTC(+m[3], +m[1] - 1, +m[2]) : (L.callLoggedTs ? L.callLoggedTs(c) : 0), k = L._acctKey(c.customer);
+          if (t && t > (last[k] || 0)) last[k] = t;
+        });
+        Object.keys(changes || {}).forEach(function (r) { if (repKey(r) === repKey(rep)) (changes[r].pending || []).forEach(function (n) { pend.add(L._acctKey(n)); }); });
+        out.ncCustMatches = out.ncCustMatches.map(function (m) {
+          var k = L._acctKey(m.name), t = last[k], bits = [];
+          if (pend.has(k)) bits.push("Flagged: not your account, waiting for Fred");
+          if (L.repAcctKeys(rep).has(k)) {
+            if (!t) bits.push("No call logged yet");
+            else if ((Date.now() - t) / DAY >= QUIET) bits.push("No call in " + Math.floor((Date.now() - t) / DAY) + " days");
+          }
+          return bits.length ? Object.assign({}, m, { sub: bits.join(" · ") + (m.sub && m.sub.trim() ? " · " + m.sub : "") }) : m;
+        });
+      } catch (e) {}
+      return out;
+    };
+  }
+
+  (async function boot() {
+    for (var i = 0; i < 240; i++) {
+      var L = logic();
+      if (L && L.state && !L.state.accessGate && L._acctKey) {
+        hookPublish(L); hookPicker(L);
+        await sync(L, true);
+        setInterval(function () { sync(L, false); }, 60000);
+        return;
+      }
+      await sleep(500);
+    }
+  })();
+})();
