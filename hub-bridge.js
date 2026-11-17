@@ -295,12 +295,23 @@
     if (L.repAcctKeys(rec.rep).has(L._acctKey(rec.customer))) return;
     try {
       var r = await fetch(HUB + "/api/account-flags", { method: "POST", headers: { "x-hub-code": code(), "content-type": "application/json" },
-        body: JSON.stringify({ action: "add", rep: rec.rep, account: rec.customer, contact: rec.contactName || "", email: rec.contactEmail || "", phone: rec.contactPhone || "", source: "Call Log" }) });
+        body: JSON.stringify({ action: "add", rep: rec.rep, account: rec.customer, contact: rec.contactName || "", email: rec.contactEmail || "", phone: rec.contactPhone || "", source: "Call Log", callDate: String(rec.date || "").slice(0, 20) }) });
       var d = await r.json().catch(function () { return {}; });
       if (!r.ok) return;
       s[k] = Date.now(); try { localStorage.setItem(SENT, JSON.stringify(s)); } catch (e) {}
       if (d.pending && L.toast) setTimeout(function () { L.toast(rec.customer + " sent to Fred to add to your account list."); }, 3000);
     } catch (e) {}
+  }
+  // Call date in ms: "2026-11-16", "11/16/2026" or a Date; 0 when it can't be read
+  function callDate(rec) {
+    var v = rec && (rec.date || rec.callDate || rec.loggedAt || rec.ts);
+    if (!v) return 0;
+    if (typeof v === "number") return v > 1e11 ? v : 0;
+    var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/) || null;
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+    m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (m) return new Date(+m[3] < 100 ? 2000 + +m[3] : +m[3], +m[1] - 1, +m[2]).getTime();
+    var t = Date.parse(v); return isNaN(t) ? 0 : t;
   }
   function hookPublish(L) {
     if (L.__hubPublish) return;
@@ -308,7 +319,14 @@
     L.__hubPublish = true;
     L.publishCalls = function (list) {
       var res = orig.apply(this, arguments);
-      try { (list || []).forEach(function (rec) { if (rec && !rec.deleted && /^yes$/i.test(rec.isNew || "") && rec.customer && rec.rep) requestAdd(L, rec); }); } catch (e) {}
+      // Only a call being logged right now (one record at a time). The app also re-sends every stored call
+      // when it opens and on imports; those are old calls, not new customers, so they never go to Fred.
+      try {
+        if (Array.isArray(list) && list.length === 1) {
+          var rec = list[0], d = callDate(rec);
+          if (rec && !rec.deleted && /^yes$/i.test(rec.isNew || "") && rec.customer && rec.rep && d && Date.now() - d < 14 * 864e5) requestAdd(L, rec);
+        }
+      } catch (e) {}
       return res;
     };
   }
