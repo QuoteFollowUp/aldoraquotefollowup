@@ -7972,7 +7972,6 @@ class Component extends DCLogic {
   emailRepCall = () => {
     const c = this.state.callDetail; if (!c) return;
     const rep = this.normalizeRep(c.rep || '') || 'the rep', first = rep.split(' ')[0], NL = '\n';
-    const me = (this.state.accessWho || '').replace(/\s*·.*$/, '');
     const line = (k, v) => (v && String(v).trim() && v !== '—' ? k + ': ' + String(v).trim() + NL : '');
     // The rep's own words, in quotes on their own lines so they stand apart from the rest of the email
     const quote = (k, v) => (v && String(v).trim() ? NL + k + ':' + NL + '"' + String(v).trim().replace(/\s*\n\s*/g, ' ') + '"' + NL : '');
@@ -7986,14 +7985,12 @@ class Component extends DCLogic {
       + line('Type of account', c.acctType) + line('Biggest opportunity', c.bigCat) + line('Additional category', c.addlCats)
       + line('Barrier to ordering', c.barrier) + line('Projects quoted', c.wereQuoted)
       + (/^yes$/i.test(c.isNew || '') ? 'New customer: Yes' + NL : '') + (/^yes$/i.test(c.highPriority || '') ? 'High priority: Yes' + NL : '')
-      + quote('Needs immediate attention', c.attention) + quote('Notes / Market Pulse', c.pulse)
-      + NL + (me || '');
+      + quote('Needs immediate attention', c.attention) + quote('Notes / Market Pulse', c.pulse);
     this._openMail(this._repAddr(c), 'Your call with ' + (c.customer || 'customer') + (c.date ? ' (' + c.date + ')' : ''), body);
   };
   emailRepFollowup = () => {
     const r = this.state.detailRecord; if (!r) return;
     const a = r.answers || {}, rep = this.normalizeRep(r.rep || '') || 'the rep', first = rep.split(' ')[0], NL = '\n';
-    const me = (this.state.accessWho || '').replace(/\s*·.*$/, '');
     const line = (k, v) => (v && String(v).trim() ? k + ': ' + String(v).trim() + NL : '');
     // The rep's own words, in quotes on their own lines so they stand apart from the rest of the email
     const quote = (k, v) => (v && String(v).trim() ? NL + k + ':' + NL + '"' + String(v).trim().replace(/\s*\n\s*/g, ' ') + '"' + NL : '');
@@ -8006,7 +8003,7 @@ class Component extends DCLogic {
       + line('Customer', r.customer) + line('Quote #', r.quoteNo) + line('Job', r.jobName) + line('Amount', this.fmtMoney(r.amount, false))
       + line('Facility', [r.facility, r.division].filter(Boolean).join(' · '))
       + line('Logged on', r.loggedAt ? new Date(r.loggedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '')
-      + qa + quote('Notes', a.notes) + NL + (me || '');
+      + qa + quote('Notes', a.notes);
     this._openMail(this._repAddr(r), 'Your follow-up on ' + (r.quoteNo ? 'quote ' + r.quoteNo + ' · ' : '') + (r.customer || 'customer'), body);
   };
   closeDetail = () => this.setState({ detailRecord: null });
