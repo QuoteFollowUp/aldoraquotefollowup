@@ -4380,7 +4380,9 @@ class Component extends DCLogic {
   _mergedLogged(imp, sto) {
     const map = new Map();
     // Christian Kelley's Riverside Glass & Mirror has no LLC. "Riverside Glass & Mirror, LLC" is Michael Eidson's Georgia account.
-    const fix = r => (r && r.customer && /christian|kelley/i.test(String(r.rep || '') + ' ' + String(r.email || '')) && /^\s*riverside\s+glass\s*(?:&|and)\s*mirror\s*,?\s*llc\.?\s*$/i.test(r.customer)) ? { ...r, customer: 'Riverside Glass & Mirror' } : r;
+    // Christian J&L calls go to J & L Glass LLC. (Clarke has J & L Glass Inc).
+    const FIX = [[/^\s*riverside\s+glass\s*(?:&|and)\s*mirror\s*,?\s*llc\.?\s*$/i, 'Riverside Glass & Mirror'], [/^\s*j\s*(?:&|and)?\s*l\s+glass\s*,?\s*(?:inc\.?)?\s*$/i, 'J & L Glass LLC.']];
+    const fix = r => { if (!r || !r.customer || !/christian|kelley/i.test(String(r.rep || '') + ' ' + String(r.email || ''))) return r; const f = FIX.find(([re]) => re.test(r.customer)); return f ? { ...r, customer: f[1] } : r; };
     (imp || this.state.imported || []).forEach(r => map.set(r.uid, fix(r)));
     (sto || this.state.stored || []).forEach(r => { if (r._deleted) map.delete(r.uid); else map.set(r.uid, fix(r)); });
     // Collapse to ONE follow-up per quote (its most recent / most complete status), so the same
@@ -7208,6 +7210,8 @@ class Component extends DCLogic {
     // "Riverside Glass & Mirror, LLC" is Michael Eidson's Kingston, GA account. "Riverside Glass & Mirror"
     // (no LLC) is Christian Kelley's. Two companies, so the LLC one gets its own key.
     if (/^RIVERSIDE GLASS (AND )?MIRRORS? L ?L ?C$/.test(t)) return 'RIVERSIDEGLASSMIRRORGA';
+    // "J & L Glass LLC" is Christian Kelley's. "J & L Glass Inc" is Clarke Haas's. Two companies.
+    if (/^J ?(AND )?L GLASS L ?L ?C$/.test(t)) return 'JANDLGLASSLLC';
     t = t.replace(/\bMFG\b/g, 'MANUFACTURING').replace(/\bSVCS?\b/g, 'SERVICES').replace(/\bSERVICE\b/g, 'SERVICES')
       .replace(/\bDOORS\b/g, 'DOOR').replace(/\bWINDOWS\b/g, 'WINDOW').replace(/\bMIRRORS\b/g, 'MIRROR')
       .replace(/\bPRODUCTS\b/g, 'PRODUCT').replace(/\bSYSTEMS\b/g, 'SYSTEM').replace(/\bSUPPLIES\b/g, 'SUPPLY')

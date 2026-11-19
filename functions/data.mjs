@@ -55,6 +55,8 @@ const parseWho = (raw) => {
 // so they never land on the Georgia account. Applied to saved calls and to every call a phone sends.
 const NAME_FIXES = [
   { rep: /christian|kelley/i, from: /^\s*riverside\s+glass\s*(?:&|and)\s*mirror\s*,?\s*llc\.?\s*$/i, to: "Riverside Glass & Mirror" },
+  // "J & L Glass Inc" is Clarke Haas's. Christian's J&L is "J & L Glass LLC."
+  { rep: /christian|kelley/i, from: /^\s*j\s*(?:&|and)?\s*l\s+glass\s*,?\s*(?:inc\.?)?\s*$/i, to: "J & L Glass LLC." },
 ];
 const fixRecord = (r) => {
   if (!r || typeof r !== "object" || !r.customer) return r;
@@ -131,7 +133,7 @@ export default async (req) => {
     let data = await store.get("snapshot", { type: "text" });
     // Rewrite saved calls once when a name fix applies, so every app reading the snapshot sees the fixed name
     try {
-      if (data && /riverside\s+glass/i.test(data)) {
+      if (data && /riverside\s+glass|j\s*&\s*l\s+glass/i.test(data)) {
         const snap = JSON.parse(data);
         let changed = false;
         const before = JSON.stringify(snap.log || null);
