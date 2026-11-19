@@ -4379,8 +4379,10 @@ class Component extends DCLogic {
   }
   _mergedLogged(imp, sto) {
     const map = new Map();
-    (imp || this.state.imported || []).forEach(r => map.set(r.uid, r));
-    (sto || this.state.stored || []).forEach(r => { if (r._deleted) map.delete(r.uid); else map.set(r.uid, r); });
+    // Christian Kelley's Riverside Glass & Mirror has no LLC. "Riverside Glass & Mirror, LLC" is Michael Eidson's Georgia account.
+    const fix = r => (r && r.customer && /christian|kelley/i.test(String(r.rep || '') + ' ' + String(r.email || '')) && /^\s*riverside\s+glass\s*(?:&|and)\s*mirror\s*,?\s*llc\.?\s*$/i.test(r.customer)) ? { ...r, customer: 'Riverside Glass & Mirror' } : r;
+    (imp || this.state.imported || []).forEach(r => map.set(r.uid, fix(r)));
+    (sto || this.state.stored || []).forEach(r => { if (r._deleted) map.delete(r.uid); else map.set(r.uid, fix(r)); });
     // Collapse to ONE follow-up per quote (its most recent / most complete status), so the same
     // quote never shows twice — even if it was logged multiple times or re-imported with a shifted timestamp.
     const byQuote = new Map();

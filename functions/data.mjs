@@ -49,6 +49,21 @@ const parseWho = (raw) => {
   return { role: "rep", rep: titleName(v), label: titleName(v) };
 };
 
+// ---- Customer name fixes ----
+// Two different companies share a name. Christian Kelley's customer is "Riverside Glass & Mirror" (no LLC).
+// "Riverside Glass & Mirror, LLC" is Michael Eidson's account in Kingston, GA. Christian's calls are renamed
+// so they never land on the Georgia account. Applied to saved calls and to every call a phone sends.
+const NAME_FIXES = [
+  { rep: /christian|kelley/i, from: /^\s*riverside\s+glass\s*(?:&|and)\s*mirror\s*,?\s*llc\.?\s*$/i, to: "Riverside Glass & Mirror" },
+];
+const fixRecord = (r) => {
+  if (!r || typeof r !== "object" || !r.customer) return r;
+  const who = String(r.rep || "") + " " + String(r.email || "");
+  for (const f of NAME_FIXES) if (f.rep.test(who) && f.from.test(String(r.customer))) return { ...r, customer: f.to };
+  return r;
+};
+const fixLog = (log) => (log && Array.isArray(log.records) ? { ...log, records: log.records.map(fixRecord) } : log);
+
 // ---- Usage log ----
 // One record per person per day (Eastern time): how many times they opened each app, first/last time.
 // Kept in its own blob so it never slows down the main snapshot. 400 days are kept.
@@ -112,7 +127,15 @@ export default async (req) => {
   }
 
   if (req.method === "GET") {
-    const data = await store.get("snapshot", { type: "text" });
+    let data = await store.get("snapshot", { type: "text" });
+    // Rewrite saved calls once when a name fix applies, so every app reading the snapshot sees the fixed name
+    try {
+      if (data && /riverside\s+glass/i.test(data)) {
+        const snap = JSON.parse(data), before = JSON.stringify(snap.log || null);
+        snap.log = fixLog(snap.log);
+        if (JSON.stringify(snap.log || null) !== before) { data = JSON.stringify(snap); await store.set("snapshot", data); }
+      }
+    } catch (e) {}
     return new Response(data || JSON.stringify({ quotes: null, log: null, updatedAt: 0 }), {
       headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
     });
@@ -146,8 +169,8 @@ export default async (req) => {
     // Follow-up history only ever grows: a device with fewer records can't wipe out what others sent.
     // Clearing on purpose sends _meta "cleared".
     if (incoming.log !== undefined) {
-      const cur = (existing.log && Array.isArray(existing.log.records)) ? existing.log.records : [];
-      const inc = (incoming.log && Array.isArray(incoming.log.records)) ? incoming.log.records : [];
+      const cur = (existing.log && Array.isArray(existing.log.records)) ? existing.log.records.map(fixRecord) : [];
+      const inc = (incoming.log && Array.isArray(incoming.log.records)) ? incoming.log.records.map(fixRecord) : [];
       if (incoming.log && incoming.log._meta === "cleared") merged.log = incoming.log;
       else {
         const k = (r) => { const a = (r && r.answers) || {};
