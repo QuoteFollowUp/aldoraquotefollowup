@@ -62,6 +62,7 @@ const fixRecord = (r) => {
   for (const f of NAME_FIXES) if (f.rep.test(who) && f.from.test(String(r.customer))) return { ...r, customer: f.to };
   return r;
 };
+const FIX_FIELDS = ["calls", "liveLog", "liveQuotes"];
 const fixLog = (log) => (log && Array.isArray(log.records) ? { ...log, records: log.records.map(fixRecord) } : log);
 
 // ---- Usage log ----
@@ -131,9 +132,16 @@ export default async (req) => {
     // Rewrite saved calls once when a name fix applies, so every app reading the snapshot sees the fixed name
     try {
       if (data && /riverside\s+glass/i.test(data)) {
-        const snap = JSON.parse(data), before = JSON.stringify(snap.log || null);
+        const snap = JSON.parse(data);
+        let changed = false;
+        const before = JSON.stringify(snap.log || null);
         snap.log = fixLog(snap.log);
-        if (JSON.stringify(snap.log || null) !== before) { data = JSON.stringify(snap); await store.set("snapshot", data); }
+        if (JSON.stringify(snap.log || null) !== before) changed = true;
+        // Calls, live follow-ups and verbal quotes are saved in their own lists
+        for (const f of FIX_FIELDS) if (Array.isArray(snap[f])) {
+          snap[f] = snap[f].map((r) => { const n = fixRecord(r); if (n !== r) changed = true; return n; });
+        }
+        if (changed) { data = JSON.stringify(snap); await store.set("snapshot", data); }
       }
     } catch (e) {}
     return new Response(data || JSON.stringify({ quotes: null, log: null, updatedAt: 0 }), {
@@ -218,8 +226,9 @@ export default async (req) => {
       if (!Array.isArray(items) || !items.length) return;
       const cur = Array.isArray(merged[field]) ? merged[field].slice() : [];
       const pos = new Map(); cur.forEach((x, i) => { if (x && x.uid) pos.set(x.uid, i); });
-      for (const x of items) {
+      for (let x of items) {
         if (!x || !x.uid) continue;
+        if (FIX_FIELDS.includes(field)) x = fixRecord(x);
         if (pos.has(x.uid)) { const i = pos.get(x.uid); if (stamp(x) >= stamp(cur[i])) cur[i] = x; }
         else { pos.set(x.uid, cur.length); cur.push(x); }
       }
