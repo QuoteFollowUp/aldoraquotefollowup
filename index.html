@@ -7973,6 +7973,8 @@ class Component extends DCLogic {
     const rep = this.normalizeRep(c.rep || '') || 'the rep', first = rep.split(' ')[0], NL = '\n';
     const me = (this.state.accessWho || '').replace(/\s*·.*$/, '');
     const line = (k, v) => (v && String(v).trim() && v !== '—' ? k + ': ' + String(v).trim() + NL : '');
+    // The rep's own words, in quotes on their own lines so they stand apart from the rest of the email
+    const quote = (k, v) => (v && String(v).trim() ? NL + k + ':' + NL + '"' + String(v).trim().replace(/\s*\n\s*/g, ' ') + '"' + NL : '');
     const body = first + ',' + NL + NL
       + 'I was looking at your call with ' + (c.customer || 'this customer') + ' on ' + (c.date || 'the date below') + ' and have a few questions.' + NL + NL
       + '[Your questions here]' + NL + NL
@@ -7983,7 +7985,7 @@ class Component extends DCLogic {
       + line('Type of account', c.acctType) + line('Biggest opportunity', c.bigCat) + line('Additional category', c.addlCats)
       + line('Barrier to ordering', c.barrier) + line('Projects quoted', c.wereQuoted)
       + (/^yes$/i.test(c.isNew || '') ? 'New customer: Yes' + NL : '') + (/^yes$/i.test(c.highPriority || '') ? 'High priority: Yes' + NL : '')
-      + line('Needs immediate attention', c.attention) + line('Notes / Market Pulse', c.pulse)
+      + quote('Needs immediate attention', c.attention) + quote('Notes / Market Pulse', c.pulse)
       + NL + (me || '');
     this._openMail(this._repAddr(c), 'Your call with ' + (c.customer || 'customer') + (c.date ? ' (' + c.date + ')' : ''), body);
   };
@@ -7992,6 +7994,8 @@ class Component extends DCLogic {
     const a = r.answers || {}, rep = this.normalizeRep(r.rep || '') || 'the rep', first = rep.split(' ')[0], NL = '\n';
     const me = (this.state.accessWho || '').replace(/\s*·.*$/, '');
     const line = (k, v) => (v && String(v).trim() ? k + ': ' + String(v).trim() + NL : '');
+    // The rep's own words, in quotes on their own lines so they stand apart from the rest of the email
+    const quote = (k, v) => (v && String(v).trim() ? NL + k + ':' + NL + '"' + String(v).trim().replace(/\s*\n\s*/g, ' ') + '"' + NL : '');
     let qa = ''; this.QUESTIONS.forEach((qq) => { if (qq.key !== 'notes') qa += line(qq.label, a[qq.key]); });
     const body = first + ',' + NL + NL
       + 'I was looking at your follow-up on quote ' + (r.quoteNo || '') + ' for ' + (r.customer || 'this customer') + ' and have a few questions.' + NL + NL
@@ -8001,7 +8005,7 @@ class Component extends DCLogic {
       + line('Customer', r.customer) + line('Quote #', r.quoteNo) + line('Job', r.jobName) + line('Amount', this.fmtMoney(r.amount, false))
       + line('Facility', [r.facility, r.division].filter(Boolean).join(' · '))
       + line('Logged on', r.loggedAt ? new Date(r.loggedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '')
-      + qa + line('Notes', a.notes) + NL + (me || '');
+      + qa + quote('Notes', a.notes) + NL + (me || '');
     this._openMail(this._repAddr(r), 'Your follow-up on ' + (r.quoteNo ? 'quote ' + r.quoteNo + ' · ' : '') + (r.customer || 'customer'), body);
   };
   closeDetail = () => this.setState({ detailRecord: null });
