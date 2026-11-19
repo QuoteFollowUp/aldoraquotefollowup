@@ -7955,7 +7955,8 @@ class Component extends DCLogic {
   };
   closeCallDetail = () => this.setState({ callDetail: null });
   // Managers and corporate: email the rep about a call or quote follow-up. Opens the default mail app (Outlook, etc.).
-  canEmailRep() { return !!(this._scope && this._scope.role && this._scope.role !== 'rep'); }
+  // Branch, team and corporate logins. Corporate (@all) has no scope, so it counts as signed in with no rep limit.
+  canEmailRep() { return this._scope ? this._scope.role !== 'rep' : !!this.state.accessWho; }
   _repAddr(rec) {
     const m = String((rec && rec.email) || '').match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
     if (m && /aldora/i.test(m[0])) return m[0];
