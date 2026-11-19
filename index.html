@@ -2244,6 +2244,9 @@
           <div style="margin-top:18px;border-top:1px solid #eef1f1;padding-top:14px;display:flex;gap:10px;align-items:center;">
             <button class="aq-btn" onClick="{{ editCall }}" style="font-size:13.5px;font-weight:700;color:#fff;background:#075b65;border:none;padding:10px 18px;border-radius:8px;cursor:pointer;">✎ Edit this call</button>
             <button class="aq-ghost" onClick="{{ deleteCall }}" style="font-size:13.5px;font-weight:700;color:#b91c1c;background:#fef2f2;border:1px solid #f3c9c9;padding:10px 18px;border-radius:8px;cursor:pointer;">🗑 Delete</button>
+            <sc-if value="{{ canEmailRep }}" hint-placeholder-val="{{ false }}">
+              <button class="aq-ghost" onClick="{{ emailRepCall }}" title="Opens your email app with the call details filled in" style="margin-left:auto;font-size:13.5px;font-weight:700;color:#075b65;background:#e6efef;border:1px solid #b9d3d3;padding:10px 18px;border-radius:8px;cursor:pointer;">✉ Email {{ cd.repFirst }}</button>
+            </sc-if>
           </div>
         </div>
       </div>
@@ -2485,6 +2488,9 @@
           <div style="display:flex;gap:10px;">
             <button class="aq-btn" onClick="{{ relog }}" style="font-size:13px;font-weight:700;color:#fff;background:#075b65;border:none;padding:9px 16px;border-radius:8px;cursor:pointer;">↻ Update / Re-log</button>
             <button class="aq-ghost" onClick="{{ reopenRecord }}" style="font-size:13px;font-weight:600;color:#5c6a68;background:#f2f5f5;border:1px solid #dde4e3;padding:9px 15px;border-radius:8px;cursor:pointer;">↩ Move to Open</button>
+            <sc-if value="{{ canEmailRep }}" hint-placeholder-val="{{ false }}">
+              <button class="aq-ghost" onClick="{{ emailRepFollowup }}" title="Opens your email app with the follow-up details filled in" style="font-size:13px;font-weight:700;color:#075b65;background:#e6efef;border:1px solid #b9d3d3;padding:9px 15px;border-radius:8px;cursor:pointer;">✉ Email rep</button>
+            </sc-if>
           </div>
           <button class="aq-ghost" onClick="{{ closeDetail }}" style="font-size:13.5px;font-weight:600;color:#16211f;background:#fff;border:1px solid #d6dedd;padding:9px 18px;border-radius:8px;cursor:pointer;">Close</button>
         </div>
@@ -7948,6 +7954,56 @@ class Component extends DCLogic {
     this.toast('Call deleted.');
   };
   closeCallDetail = () => this.setState({ callDetail: null });
+  // Managers and corporate: email the rep about a call or quote follow-up. Opens the default mail app (Outlook, etc.).
+  canEmailRep() { return !!(this._scope && this._scope.role && this._scope.role !== 'rep'); }
+  _repAddr(rec) {
+    const m = String((rec && rec.email) || '').match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+    if (m && /aldora/i.test(m[0])) return m[0];
+    return this.aldoraEmail(this.normalizeRep((rec && rec.rep) || '')) || '';
+  }
+  _openMail(to, subject, body) {
+    const cut = (t, n) => (t.length > n ? t.slice(0, n) + '…' : t);
+    const a = document.createElement('a');
+    a.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(cut(body, 1800));
+    a.style.display = 'none'; document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 500);
+    this.toast('Email to ' + (to || 'the rep') + ' is open in your mail app.');
+  }
+  emailRepCall = () => {
+    const c = this.state.callDetail; if (!c) return;
+    const rep = this.normalizeRep(c.rep || '') || 'the rep', first = rep.split(' ')[0], NL = '\n';
+    const me = (this.state.accessWho || '').replace(/\s*·.*$/, '');
+    const line = (k, v) => (v && String(v).trim() && v !== '—' ? k + ': ' + String(v).trim() + NL : '');
+    const body = first + ',' + NL + NL
+      + 'I was looking at your call with ' + (c.customer || 'this customer') + ' on ' + (c.date || 'the date below') + ' and have a few questions.' + NL + NL
+      + '[Your questions here]' + NL + NL
+      + 'Can you send me any more detail you have and let me know your next step and when you plan to follow up?' + NL + NL
+      + '--- CALL DETAILS ---' + NL
+      + line('Customer', c.customer) + line('Date', c.date) + line('Branch', c.branch)
+      + line('Contact', c.contactName) + line('Contact email', c.contactEmail) + line('Contact phone', c.contactPhone)
+      + line('Type of account', c.acctType) + line('Biggest opportunity', c.bigCat) + line('Additional category', c.addlCats)
+      + line('Barrier to ordering', c.barrier) + line('Projects quoted', c.wereQuoted)
+      + (/^yes$/i.test(c.isNew || '') ? 'New customer: Yes' + NL : '') + (/^yes$/i.test(c.highPriority || '') ? 'High priority: Yes' + NL : '')
+      + line('Needs immediate attention', c.attention) + line('Notes / Market Pulse', c.pulse)
+      + NL + (me || '');
+    this._openMail(this._repAddr(c), 'Your call with ' + (c.customer || 'customer') + (c.date ? ' (' + c.date + ')' : ''), body);
+  };
+  emailRepFollowup = () => {
+    const r = this.state.detailRecord; if (!r) return;
+    const a = r.answers || {}, rep = this.normalizeRep(r.rep || '') || 'the rep', first = rep.split(' ')[0], NL = '\n';
+    const me = (this.state.accessWho || '').replace(/\s*·.*$/, '');
+    const line = (k, v) => (v && String(v).trim() ? k + ': ' + String(v).trim() + NL : '');
+    let qa = ''; this.QUESTIONS.forEach((qq) => { if (qq.key !== 'notes') qa += line(qq.label, a[qq.key]); });
+    const body = first + ',' + NL + NL
+      + 'I was looking at your follow-up on quote ' + (r.quoteNo || '') + ' for ' + (r.customer || 'this customer') + ' and have a few questions.' + NL + NL
+      + '[Your questions here]' + NL + NL
+      + 'Can you send me any more detail you have and let me know your next step and when you plan to follow up?' + NL + NL
+      + '--- FOLLOW-UP DETAILS ---' + NL
+      + line('Customer', r.customer) + line('Quote #', r.quoteNo) + line('Job', r.jobName) + line('Amount', this.fmtMoney(r.amount, false))
+      + line('Facility', [r.facility, r.division].filter(Boolean).join(' · '))
+      + line('Logged on', r.loggedAt ? new Date(r.loggedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '')
+      + qa + line('Notes', a.notes) + NL + (me || '');
+    this._openMail(this._repAddr(r), 'Your follow-up on ' + (r.quoteNo ? 'quote ' + r.quoteNo + ' · ' : '') + (r.customer || 'customer'), body);
+  };
   closeDetail = () => this.setState({ detailRecord: null });
   openRepDrill = (rep) => this.setState({ repDrill: rep });
   closeRepDrill = () => this.setState({ repDrill: null });
@@ -9881,10 +9937,11 @@ class Component extends DCLogic {
       weeklyBtnOpacity: s.weeklyBusy ? '0.6' : '1',
       ...this.scorecardRender(),
       callDetailOpen: !!s.callDetail, closeCallDetail: this.closeCallDetail, editCall: this.editCall, deleteCall: this.deleteCall,
+      canEmailRep: this.canEmailRep(), emailRepCall: this.emailRepCall, emailRepFollowup: this.emailRepFollowup,
       callFormTitle: this._editUid ? 'Edit Call / Visit' : 'Log a Call / Visit',
       callFormSaveLabel: this._editUid ? 'Update call' : 'Save call',
       cd: s.callDetail ? {
-        customer: s.callDetail.customer || '—', rep: this.normalizeRep(s.callDetail.rep||'')||'—', date: s.callDetail.date || '—', branch: s.callDetail.branch || '—',
+        customer: s.callDetail.customer || '—', rep: this.normalizeRep(s.callDetail.rep||'')||'—', repFirst: (this.normalizeRep(s.callDetail.rep||'')||'rep').split(' ')[0], date: s.callDetail.date || '—', branch: s.callDetail.branch || '—',
         loggedAt: this.fmtLoggedAt(s.callDetail) ? 'Logged ' + this.fmtLoggedAt(s.callDetail) + ' · ' + this.loggedLag(s.callDetail) : '', hasLoggedAt: !!this.fmtLoggedAt(s.callDetail),
         contactName: s.callDetail.contactName || '—', contactEmail: s.callDetail.contactEmail || '—', contactPhone: s.callDetail.contactPhone || '—',
         ...(() => { const mm = this._callMissing(s.callDetail); const red = '2px solid #c0392b', none = '0px solid transparent';
