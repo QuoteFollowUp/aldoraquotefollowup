@@ -272,14 +272,31 @@
                 <div style="font-size:15px;font-weight:800;color:#16211f;">{{ h.to }}</div>
                 <div style="font-size:13.5px;color:#3a4846;line-height:1.55;margin-top:3px;text-wrap:pretty;">{{ h.what }}</div>
                 <div style="font-size:12px;color:#7d938f;margin-top:6px;">{{ h.from }} · {{ h.when }}</div>
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px;">
-                  <button onClick="{{ h.onLike }}" style="font-size:12px;font-weight:700;color:{{ h.likeFg }};background:{{ h.likeBg }};border:1px solid {{ h.likeBd }};border-radius:999px;padding:5px 13px;cursor:pointer;">{{ h.likeLabel }}</button>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px;">
+                  <sc-for list="{{ h.reacts }}" as="e" hint-placeholder-count="5">
+                    <button onClick="{{ e.onClick }}" title="{{ e.title }}" style="font-size:13px;font-weight:700;color:{{ e.fg }};background:{{ e.bg }};border:1px solid {{ e.bd }};border-radius:999px;padding:5px 11px;cursor:pointer;line-height:1.2;">{{ e.label }}</button>
+                  </sc-for>
+                  <button onClick="{{ h.onToggleComments }}" style="font-size:12px;font-weight:700;color:#075b65;background:#fff;border:1px solid #dde4e3;border-radius:999px;padding:5px 11px;cursor:pointer;line-height:1.2;">{{ h.commentLabel }}</button>
                   <sc-if value="{{ h.hasLikes }}" hint-placeholder-val="{{ false }}">
                     <button onClick="{{ h.onShowLikers }}" style="font-size:12px;font-weight:600;color:#5c6a68;background:none;border:none;cursor:pointer;padding:5px 2px;text-decoration:underline;">{{ h.countLabel }}</button>
                   </sc-if>
                 </div>
                 <sc-if value="{{ h.likersOpen }}" hint-placeholder-val="{{ false }}">
-                  <div style="font-size:12px;color:#3a4846;background:#f4f8f7;border:1px solid #e2ebe9;border-radius:8px;padding:8px 11px;margin-top:7px;line-height:1.5;">{{ h.likersText }}</div>
+                  <div style="font-size:12px;color:#3a4846;background:#f4f8f7;border:1px solid #e2ebe9;border-radius:8px;padding:8px 11px;margin-top:7px;line-height:1.6;">{{ h.likersText }}</div>
+                </sc-if>
+                <sc-if value="{{ h.commentsOpen }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:9px;border-top:1px solid #e6ecea;padding-top:9px;">
+                    <sc-for list="{{ h.comments }}" as="c" hint-placeholder-count="2">
+                      <div style="background:#f7faf9;border:1px solid #e6ecea;border-radius:10px;padding:8px 11px;margin-bottom:7px;">
+                        <div style="font-size:12px;color:#7d938f;"><b style="color:#16211f;">{{ c.name }}</b> · {{ c.when }}<sc-if value="{{ c.canDelete }}" hint-placeholder-val="{{ false }}"> · <button onClick="{{ c.onDelete }}" style="font-size:12px;color:#a33a3a;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline;">Delete</button></sc-if></div>
+                        <div style="font-size:13px;color:#3a4846;line-height:1.5;margin-top:2px;text-wrap:pretty;">{{ c.text }}</div>
+                      </div>
+                    </sc-for>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <input id="{{ h.commentInputId }}" defaultValue="{{ h.commentDraft }}" onInput="{{ h.onCommentInput }}" maxlength="280" placeholder="Add a short comment" style="flex:1;min-width:0;font-size:14px;padding:9px 11px;border:1px solid #d6dedd;border-radius:8px;background:#fff;" />
+                      <button onClick="{{ h.onPostComment }}" style="font-size:13px;font-weight:700;color:#fff;background:#075b65;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;">Post</button>
+                    </div>
+                  </div>
                 </sc-if>
                 <sc-if value="{{ h.canEdit }}" hint-placeholder-val="{{ false }}">
                   <button onClick="{{ h.onEdit }}" style="font-size:12px;font-weight:700;color:#075b65;background:none;border:none;cursor:pointer;padding:5px 0 0;text-decoration:underline;">Edit</button>
@@ -357,14 +374,31 @@
                   <div style="font-size:14px;font-weight:800;color:#16211f;">{{ h.to }}</div>
                   <div style="font-size:13px;color:#3a4846;line-height:1.5;margin-top:2px;text-wrap:pretty;">{{ h.what }}</div>
                   <div style="font-size:11.5px;color:#7d938f;margin-top:5px;">{{ h.from }} · {{ h.when }}</div>
-                  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:8px;">
-                    <button onClick="{{ h.onLike }}" style="font-size:11.5px;font-weight:700;color:{{ h.likeFg }};background:{{ h.likeBg }};border:1px solid {{ h.likeBd }};border-radius:999px;padding:4px 12px;cursor:pointer;">{{ h.likeLabel }}</button>
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px;">
+                    <sc-for list="{{ h.reacts }}" as="e" hint-placeholder-count="5">
+                      <button onClick="{{ e.onClick }}" title="{{ e.title }}" style="font-size:12.5px;font-weight:700;color:{{ e.fg }};background:{{ e.bg }};border:1px solid {{ e.bd }};border-radius:999px;padding:4px 10px;cursor:pointer;line-height:1.2;">{{ e.label }}</button>
+                    </sc-for>
+                    <button onClick="{{ h.onToggleComments }}" style="font-size:11.5px;font-weight:700;color:#075b65;background:#fff;border:1px solid #dde4e3;border-radius:999px;padding:4px 10px;cursor:pointer;line-height:1.2;">{{ h.commentLabel }}</button>
                     <sc-if value="{{ h.hasLikes }}" hint-placeholder-val="{{ false }}">
-                      <button onClick="{{ h.onShowLikers }}" style="font-size:11.5px;font-weight:600;color:#5c6a68;background:none;border:none;cursor:pointer;padding:4px 2px;text-decoration:underline;">{{ h.countLabel }}</button>
+                      <button onClick="{{ h.onShowLikers }}" style="font-size:11.5px;font-weight:600;color:#5c6a68;background:none;border:none;cursor:pointer;padding:5px 2px;text-decoration:underline;">{{ h.countLabel }}</button>
                     </sc-if>
                   </div>
                   <sc-if value="{{ h.likersOpen }}" hint-placeholder-val="{{ false }}">
-                    <div style="font-size:11.5px;color:#3a4846;background:#f4f8f7;border:1px solid #e2ebe9;border-radius:8px;padding:7px 10px;margin-top:6px;line-height:1.5;">{{ h.likersText }}</div>
+                    <div style="font-size:11.5px;color:#3a4846;background:#f4f8f7;border:1px solid #e2ebe9;border-radius:8px;padding:8px 11px;margin-top:7px;line-height:1.6;">{{ h.likersText }}</div>
+                  </sc-if>
+                  <sc-if value="{{ h.commentsOpen }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:9px;border-top:1px solid #e6ecea;padding-top:9px;">
+                      <sc-for list="{{ h.comments }}" as="c" hint-placeholder-count="2">
+                        <div style="background:#f7faf9;border:1px solid #e6ecea;border-radius:10px;padding:8px 11px;margin-bottom:7px;">
+                          <div style="font-size:11.5px;color:#7d938f;"><b style="color:#16211f;">{{ c.name }}</b> · {{ c.when }}<sc-if value="{{ c.canDelete }}" hint-placeholder-val="{{ false }}"> · <button onClick="{{ c.onDelete }}" style="font-size:11.5px;color:#a33a3a;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline;">Delete</button></sc-if></div>
+                          <div style="font-size:12.5px;color:#3a4846;line-height:1.5;margin-top:2px;text-wrap:pretty;">{{ c.text }}</div>
+                        </div>
+                      </sc-for>
+                      <div style="display:flex;gap:8px;align-items:center;">
+                        <input id="{{ h.commentInputId }}" defaultValue="{{ h.commentDraft }}" onInput="{{ h.onCommentInput }}" maxlength="280" placeholder="Add a short comment" style="flex:1;min-width:0;font-size:14px;padding:9px 11px;border:1px solid #d6dedd;border-radius:8px;background:#fff;" />
+                        <button onClick="{{ h.onPostComment }}" style="font-size:13px;font-weight:700;color:#fff;background:#075b65;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;">Post</button>
+                      </div>
+                    </div>
                   </sc-if>
                   <sc-if value="{{ h.canEdit }}" hint-placeholder-val="{{ false }}">
                     <button onClick="{{ h.onEdit }}" style="font-size:11.5px;font-weight:700;color:#075b65;background:none;border:none;cursor:pointer;padding:4px 0 0;text-decoration:underline;">Edit</button>
@@ -2606,7 +2640,7 @@
           <button onClick="{{ closeHfWho }}" style="font-size:20px;line-height:1;color:#6b7977;background:none;border:none;cursor:pointer;padding:2px 6px;">×</button>
         </div>
         <div style="padding:20px 22px 24px;display:grid;gap:14px;">
-          <div style="font-size:13px;color:#5c6a68;line-height:1.5;">Pick your name from the list, or type it in if you're not on it. It'll be remembered on this device and shown with your likes.</div>
+          <div style="font-size:13px;color:#5c6a68;line-height:1.5;">Pick your name from the list, or type it in if you're not on it. It'll be remembered on this device and shown with your reactions and comments.</div>
           <select value="{{ hfWhoName }}" onChange="{{ onHfWhoName }}" style="width:100%;box-sizing:border-box;font-size:16px;padding:11px 13px;border:1.5px solid #cdd6d5;border-radius:9px;color:#16211f;background:#fcfdfd;">
             <option value="">Select your name…</option>
             <sc-for list="{{ hfWhoOptions }}" as="n" hint-placeholder-count="6"><option value="{{ n }}">{{ n }}</option></sc-for>
@@ -2969,7 +3003,7 @@ class Component extends DCLogic {
     calls: [], callsLoaded: false, callsUnlocked: false, callsPin: '', callsPinErr: false,
     highFives: [], hfOpen: false, hfTo: '', hfWhat: '', hfFrom: '', hfErr: '', hfEditUid: '', hfMine: [],
     wxOpen: false, wx_reps: [],
-    hfWho: '', hfWhoOpen: false, hfWhoName: '', hfWhoTyped: '', hfWhoPending: '', hfLikersUid: '',
+    hfWho: '', hfWhoOpen: false, hfWhoName: '', hfWhoTyped: '', hfWhoPending: '', hfLikersUid: '', hfCommentsUid: '', hfDrafts: {},
     cl_rep: '', cl_reps: [], clRepOpen: false, cl_branches: [], clBranchOpen: false, cl_custs: [], clCustOpen: false, cl_search: '', cl_sort: 'date_desc', cl_weeks: [], clWeekOpen: false, cl_barriers: [], clBarrierOpen: false, cl_opps: [], clOppOpen: false, callPage: 0,
     ncCustQuery: '', ncCustOpen: false,
     callFormOpen: false, callFormErr: '', nc_rep: '', nc_branch: '', nc_customer: '', nc_contact: '', nc_opp: '', nc_pulse: '', nc_isNew: false,
@@ -3586,7 +3620,18 @@ class Component extends DCLogic {
       const base = (h.editedAt || 0) > (prev.editedAt || 0) ? h : prev;
       const names = new Map();
       [...(prev.likes || []), ...(h.likes || [])].forEach(n => names.set(String(n).toLowerCase(), n));
-      hfSeen.set(h.uid, { ...base, likes: [...names.values()] });
+      // Cloud copy comes first, so its reactions and comments are the truth; this device only adds what it
+      // has not published yet. Tombstoned (deleted) comments never come back.
+      const gone = new Set([...(prev.commentsGone || []), ...(h.commentsGone || [])]);
+      const cmap = new Map();
+      [...(prev.comments || []), ...(h.comments || [])].forEach(c => { if (c && c.uid && !gone.has(c.uid) && !cmap.has(c.uid)) cmap.set(c.uid, c); });
+      const reactions = {};
+      [prev.reactions || {}, h.reactions || {}].forEach(R => Object.entries(R).forEach(([e, L]) => {
+        const m = new Map((reactions[e] || []).map(n => [String(n).toLowerCase(), n]));
+        (L || []).forEach(n => m.set(String(n).toLowerCase(), n));
+        reactions[e] = [...m.values()];
+      }));
+      hfSeen.set(h.uid, { ...base, likes: [...names.values()], reactions, comments: [...cmap.values()].sort((a, b) => (a.at || 0) - (b.at || 0)), commentsGone: [...gone] });
     });
     const highFives = [...hfSeen.values()];
     // Rep flags (vacation / in-office weeks, new-rep status) are pushed to the shared snapshot by
@@ -5312,7 +5357,12 @@ class Component extends DCLogic {
     const logo = new URL('./aldora-logo.png', location.href).href;
     const rows = list.map(h => { const likes = [...new Set((h.likes || []).map(n => String(n || '').trim()).filter(Boolean))];
       return '<div class="hf"><div class="top"><span class="to">' + esc(h.to) + '</span><span class="when">' + esc(new Date(h.at || 0).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })) + '</span></div>'
-        + '<div class="what">' + esc(h.what) + '</div><div class="meta">' + (h.from ? 'from ' + esc(h.from) : 'from a colleague') + (likes.length ? ' · ' + likes.length + ' like' + (likes.length === 1 ? '' : 's') + ': ' + esc(likes.join(', ')) : '') + '</div></div>'; }).join('');
+        + '<div class="what">' + esc(h.what) + '</div><div class="meta">' + (h.from ? 'from ' + esc(h.from) : 'from a colleague')
+        + (() => { const parts = (likes.length ? ['👏 ' + likes.length] : []).concat(Object.entries(h.reactions || {}).filter(([, L]) => (L || []).length).map(([e, L]) => e + ' ' + L.length));
+            const gone = new Set(h.commentsGone || []), cs = (h.comments || []).filter(c => c && !gone.has(c.uid));
+            return (parts.length ? ' · ' + parts.join('  ') : '') + (cs.length ? ' · ' + cs.length + ' comment' + (cs.length === 1 ? '' : 's') : '')
+              + (cs.length ? '</div><div class="meta">' + cs.map(c => '<b>' + esc(c.name || '') + ':</b> ' + esc(c.text)).join('<br>') : ''); })()
+        + '</div></div>'; }).join('');
     const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Aldora High Fives – ' + esc(title) + '</title><style>'
       + 'body{font-family:-apple-system,Segoe UI,Helvetica,sans-serif;color:#16211f;margin:28px;}'
       + '.head{display:flex;align-items:center;gap:14px;border-bottom:2px solid #075b65;padding-bottom:12px;margin-bottom:16px;}'
@@ -5346,7 +5396,8 @@ class Component extends DCLogic {
     const editUid = this.state.hfEditUid;
     if (editUid) {
       const list = (this.state.highFives || []).map(h => h && h.uid === editUid ? { ...h, to, what, from, editedAt: Date.now() } : h);
-      const upd = list.find(h => h && h.uid === editUid);
+      const full = list.find(h => h && h.uid === editUid);
+      const upd = { uid: full.uid, to: full.to, what: full.what, from: full.from, editedAt: full.editedAt };
       this.setState({ highFives: list, hfOpen: false, hfEditUid: '', hfTo: '', hfWhat: '', hfFrom: '', hfErr: '' });
       this.idbSet('highFives', list).catch(() => {});
       this.autoPublish && this.autoPublish({ updateHighFives: [upd] });
@@ -5380,6 +5431,20 @@ class Component extends DCLogic {
       (Array.isArray(h.likes) ? h.likes : []).forEach(n => { if (n) seenL.set(String(n).trim().toLowerCase(), String(n).trim()); });
       const likes = [...seenL.values()];
       const liked = !!who && seenL.has(who);
+      // Reactions: 👏 is the original Like (h.likes); the rest live in h.reactions
+      const R = h.reactions || {};
+      const namesFor = (e) => e === '👏' ? likes : [...new Map((R[e] || []).filter(Boolean).map(n => [String(n).trim().toLowerCase(), String(n).trim()])).values()];
+      const reacts = this.HF_EMOJI.map(e => {
+        const L = namesFor(e), on = !!who && L.some(n => n.toLowerCase() === who);
+        return { emoji: e, label: L.length ? e + ' ' + L.length : e, title: (on ? 'Take back ' : 'React with ') + e,
+          bg: on ? '#e6efef' : '#fff', fg: on ? '#075b65' : '#5c6a68', bd: on ? '#9dc4c4' : '#dde4e3',
+          onClick: () => this.reactHf(h.uid, e) };
+      });
+      const who2 = this.HF_EMOJI.map(e => [e, namesFor(e)]).filter(([, L]) => L.length);
+      const total = who2.reduce((n, [, L]) => n + L.length, 0);
+      const gone = new Set(h.commentsGone || []);
+      const cs = (Array.isArray(h.comments) ? h.comments : []).filter(c => c && !gone.has(c.uid)).sort((a, b) => (a.at || 0) - (b.at || 0));
+      const commentsOpen = this.state.hfCommentsUid === h.uid;
       return {
         uid: h.uid, to: h.to, what: h.what,
         from: h.from ? 'from ' + h.from : 'from a colleague',
@@ -5392,20 +5457,76 @@ class Component extends DCLogic {
         likeFg: liked ? '#075b65' : '#6b7977',
         likeBd: liked ? '#9dc4c4' : '#dde4e3',
         likeCount: likes.length,
-        hasLikes: likes.length > 0,
-        countLabel: likes.length + (likes.length === 1 ? ' like' : ' likes'),
+        reacts,
+        hasLikes: total > 0,
+        countLabel: openUid === h.uid ? 'Hide who reacted' : 'See who reacted',
         onShowLikers: () => this.showLikers(h.uid),
-        likersOpen: openUid === h.uid && likes.length > 0,
-        likersText: 'Liked by ' + likes.join(', '),
+        likersOpen: openUid === h.uid && total > 0,
+        likersText: who2.map(([e, L]) => e + ' ' + L.join(', ')).join('   ·   '),
+        commentCount: cs.length,
+        commentLabel: cs.length ? '💬 ' + cs.length + (cs.length === 1 ? ' comment' : ' comments') : '💬 Comment',
+        onToggleComments: () => this.setState({ hfCommentsUid: commentsOpen ? '' : h.uid }),
+        commentsOpen,
+        hasComments: cs.length > 0,
+        comments: cs.map(c => ({
+          name: c.name || 'Someone', text: c.text, when: this.fmtWhen(c.at),
+          canDelete: isAdmin || (!!who && String(c.name || '').trim().toLowerCase() === who),
+          onDelete: () => this.deleteHfComment(h.uid, c.uid),
+        })),
+        commentDraft: (this.state.hfDrafts || {})[h.uid] || '',
+        commentInputId: 'hfc-' + h.uid,
+        onCommentInput: (e) => { const d = { ...(this.state.hfDrafts || {}) }; d[h.uid] = e.target.value; this.state.hfDrafts = d; },
+        onPostComment: () => this.commentHf(h.uid),
       };
     });
   }
   // Likes are attributed to the person's name, picked once from the roster on this device so the
   // same person can never like a post twice under two different spellings.
-  likeHf = (uid) => {
-    const who = this.normalizeRep((this.state.hfWho || '').trim()) || (this.state.hfWho || '').trim();
-    if (!who) return this.setState({ hfWhoOpen: true, hfWhoName: '', hfWhoTyped: '', hfWhoPending: uid });
-    this._applyLike(uid, who);
+  likeHf = (uid) => this.reactHf(uid, '👏');
+  HF_EMOJI = ['👏', '❤️', '🔥', '🎉', '🙌'];
+  _hfWhoNow() { return this.normalizeRep((this.state.hfWho || '').trim()) || (this.state.hfWho || '').trim(); }
+  // Reacting and commenting both need the person's name, asked once per device (same prompt as Like)
+  reactHf = (uid, emoji, whoGiven) => {
+    const who = whoGiven || this._hfWhoNow();
+    if (!who) return this.setState({ hfWhoOpen: true, hfWhoName: '', hfWhoTyped: '', hfWhoPending: { kind: 'react', uid, emoji } });
+    if (emoji === '👏') return this._applyLike(uid, who);
+    let on = true;
+    const same = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+    const list = (this.state.highFives || []).map(h => {
+      if (!h || h.uid !== uid) return h;
+      const R = { ...(h.reactions || {}) }, L = (R[emoji] || []).filter(Boolean);
+      on = !L.some(n => same(n, who));
+      R[emoji] = on ? [...L, who] : L.filter(n => !same(n, who));
+      if (!R[emoji].length) delete R[emoji];
+      return { ...h, reactions: R };
+    });
+    this.setState({ highFives: list });
+    this.idbSet('highFives', list).catch(() => {});
+    this.autoPublish && this.autoPublish({ reactHighFives: [{ uid, emoji, name: who, on }] });
+    setTimeout(() => { try { this._loadAll && this._loadAll(); } catch (e) {} }, 1200);
+  };
+  commentHf = (uid, whoGiven) => {
+    const text = String((this.state.hfDrafts || {})[uid] || '').replace(/\s+/g, ' ').trim().slice(0, 280);
+    if (!text) return this.toast('Type a comment first');
+    const who = whoGiven || this._hfWhoNow();
+    if (!who) return this.setState({ hfWhoOpen: true, hfWhoName: '', hfWhoTyped: '', hfWhoPending: { kind: 'comment', uid } });
+    const c = { uid: 'hc' + Date.now() + Math.random().toString(36).slice(2, 6), name: who, text, at: Date.now() };
+    const list = (this.state.highFives || []).map(h => h && h.uid === uid ? { ...h, comments: [...(h.comments || []), c] } : h);
+    const d = { ...(this.state.hfDrafts || {}) }; delete d[uid];
+    this.setState({ highFives: list, hfDrafts: d, hfCommentsUid: uid });
+    document.querySelectorAll('[id="hfc-' + uid + '"]').forEach(el => { el.value = ''; });
+    this.idbSet('highFives', list).catch(() => {});
+    this.autoPublish && this.autoPublish({ commentHighFives: [{ uid, comment: c }] });
+    this.toast('Comment posted');
+    setTimeout(() => { try { this._loadAll && this._loadAll(); } catch (e) {} }, 1200);
+  };
+  deleteHfComment = (uid, cuid) => {
+    if (!confirm('Delete this comment?')) return;
+    const list = (this.state.highFives || []).map(h => h && h.uid === uid
+      ? { ...h, comments: (h.comments || []).filter(c => c && c.uid !== cuid), commentsGone: [...(h.commentsGone || []), cuid] } : h);
+    this.setState({ highFives: list });
+    this.idbSet('highFives', list).catch(() => {});
+    this.autoPublish && this.autoPublish({ deleteHfComments: [{ uid, cuid }] });
   };
   _applyLike = (uid, who) => {
     let on = true;
@@ -5430,10 +5551,16 @@ class Component extends DCLogic {
     const raw = ((this.state.hfWhoName || '').trim() || (this.state.hfWhoTyped || '').trim());
     const who = this.normalizeRep(raw) || raw;
     if (!who) return;
-    const uid = this.state.hfWhoPending;
+    const pend = this.state.hfWhoPending;
     this.setState({ hfWho: who, hfWhoOpen: false, hfWhoPending: '' });
     this.idbSet('hfWho', who).catch(() => {});
-    if (uid) this._applyLike(uid, who);
+    // Finish what they tapped before we asked their name (older builds stored just the uid for a Like)
+    setTimeout(() => {
+      if (!pend) return;
+      if (typeof pend === 'string') this._applyLike(pend, who);
+      else if (pend.kind === 'react') this.reactHf(pend.uid, pend.emoji, who);
+      else if (pend.kind === 'comment') this.commentHf(pend.uid, who);
+    }, 0);
   };
   showLikers = (uid) => this.setState({ hfLikersUid: this.state.hfLikersUid === uid ? '' : uid });
   fmtWhen(ms) {    if (!ms) return '';

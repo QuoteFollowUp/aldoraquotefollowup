@@ -263,10 +263,72 @@ export default async (req) => {
       });
     }
     // Edits to an existing High Five — replace in place by uid (appendInto skips known uids).
+    // Only the post's own words change; likes, reactions and comments other people added are kept.
     if (Array.isArray(incoming.updateHighFives) && incoming.updateHighFives.length) {
       const cur = Array.isArray(merged.highFives) ? merged.highFives : [];
       const byUid = new Map(incoming.updateHighFives.filter((x) => x && x.uid).map((x) => [x.uid, x]));
-      merged.highFives = cur.map((h) => (h && byUid.has(h.uid) ? { ...h, ...byUid.get(h.uid) } : h));
+      merged.highFives = cur.map((h) => {
+        if (!h || !byUid.has(h.uid)) return h;
+        const u = byUid.get(h.uid), keep = {};
+        ["to", "what", "from", "editedAt"].forEach((k) => { if (k in u) keep[k] = u[k]; });
+        return { ...h, ...keep };
+      });
+    }
+    // Reactions (Nov 20 2026) — one name per emoji per High Five, added or taken off one at a time so people
+    // reacting from different devices never undo each other. 👏 is the original Like, kept in h.likes.
+    const HF_EMOJI = ["👏", "❤️", "🔥", "🎉", "🙌"];
+    const sameName = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+    if (Array.isArray(incoming.reactHighFives) && incoming.reactHighFives.length) {
+      const cur = Array.isArray(merged.highFives) ? merged.highFives : [];
+      merged.highFives = cur.map((h) => {
+        if (!h || !h.uid) return h;
+        let next = h;
+        incoming.reactHighFives.forEach((op) => {
+          if (!op || op.uid !== h.uid || !op.name || !HF_EMOJI.includes(op.emoji)) return;
+          const name = String(op.name).trim().slice(0, 60);
+          if (op.emoji === "👏") {
+            const likes = Array.isArray(next.likes) ? next.likes : [];
+            const has = likes.some((n) => sameName(n, name));
+            if (op.on && !has) next = { ...next, likes: [...likes, name] };
+            else if (!op.on && has) next = { ...next, likes: likes.filter((n) => !sameName(n, name)) };
+            return;
+          }
+          const R = { ...(next.reactions || {}) };
+          const list = Array.isArray(R[op.emoji]) ? R[op.emoji] : [];
+          const has = list.some((n) => sameName(n, name));
+          if (op.on && !has) R[op.emoji] = [...list, name];
+          else if (!op.on && has) R[op.emoji] = list.filter((n) => !sameName(n, name));
+          else return;
+          if (!R[op.emoji].length) delete R[op.emoji];
+          next = { ...next, reactions: R };
+        });
+        return next;
+      });
+    }
+    // Comments (Nov 20 2026) — short replies under a High Five. Added by their own uid; deleted ones leave a
+    // tombstone so a device that still has the comment cached never brings it back.
+    if ((Array.isArray(incoming.commentHighFives) && incoming.commentHighFives.length) ||
+        (Array.isArray(incoming.deleteHfComments) && incoming.deleteHfComments.length)) {
+      const adds = Array.isArray(incoming.commentHighFives) ? incoming.commentHighFives : [];
+      const dels = Array.isArray(incoming.deleteHfComments) ? incoming.deleteHfComments : [];
+      const cur = Array.isArray(merged.highFives) ? merged.highFives : [];
+      merged.highFives = cur.map((h) => {
+        if (!h || !h.uid) return h;
+        const mineAdds = adds.filter((op) => op && op.uid === h.uid && op.comment && op.comment.uid);
+        const mineDels = dels.filter((op) => op && op.uid === h.uid && op.cuid);
+        if (!mineAdds.length && !mineDels.length) return h;
+        const gone = new Set([...(Array.isArray(h.commentsGone) ? h.commentsGone : []), ...mineDels.map((op) => String(op.cuid))]);
+        const list = (Array.isArray(h.comments) ? h.comments : []).filter((c) => c && !gone.has(c.uid));
+        const have = new Set(list.map((c) => c.uid));
+        mineAdds.forEach((op) => {
+          const c = op.comment, cuid = String(c.uid).slice(0, 40);
+          const text = String(c.text || "").replace(/\s+/g, " ").trim().slice(0, 280);
+          if (!text || have.has(cuid) || gone.has(cuid)) return;
+          have.add(cuid);
+          list.push({ uid: cuid, name: String(c.name || "").trim().slice(0, 60), text, at: Number(c.at) || Date.now() });
+        });
+        return { ...h, comments: list.slice(-100), commentsGone: [...gone].slice(-300) };
+      });
     }
 
     // Reminders — insert or replace by uid (newest edit wins), so check-offs sync across devices.
