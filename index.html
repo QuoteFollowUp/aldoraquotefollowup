@@ -68,7 +68,7 @@
       <span style="display:inline-flex;align-items:center;background:#fff;border-radius:8px;padding:4px 8px;flex:0 0 auto;"><img src="aldora-logo.png" alt="Aldora" style="height:32px;display:block;" /></span>
       <div style="display:flex;flex-direction:column;justify-content:center;overflow:hidden;line-height:1.15;">
         <span style="font-weight:800;font-size:15px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Aldora Quote Follow Up and Call Log</span>
-        <span style="font-size:9px;color:#5d726f;letter-spacing:.05em;">v2026-11-13h</span>
+        <span style="font-size:9px;color:#5d726f;letter-spacing:.05em;">v2026-11-20a</span>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;flex:1 1 auto;min-width:0;">
@@ -3276,7 +3276,7 @@ class Component extends DCLogic {
   }
 
   CLOUD_API = '/api/data';
-  APP_VERSION = '2026-11-13h';
+  APP_VERSION = '2026-11-20a';
 
   // Market-intel questions: gathered once per customer, NOT per quote. Removed from the follow-up form.
   MARKET_KEYS = ['decisionFactor','sentiment','marketTrend','upcoming','marketMoving','vendors','vendorName'];
@@ -3556,6 +3556,8 @@ class Component extends DCLogic {
     const cloudTag = cloud ? '☁ ' : '';
 
     // Live rep follow-ups shared via cloud (everyone sees each other's in-app logs)
+    // Keys of reps' in-app follow-ups — a FeneVision close record with the same key is kept on cleanup (see _pruneClosed)
+    this._liveKeys = new Set(((cloud && Array.isArray(cloud.liveLog)) ? cloud.liveLog : []).filter(r => r).map(r => r.matchKey || this.qkey(r)));
     if (cloud && Array.isArray(cloud.liveLog) && cloud.liveLog.length) {
       const seenUid = new Set(imported.map(r => r.uid));
       const masterKeys = new Set(imported.map(r => r.matchKey || this.qkey(r))); // admin's uploaded master
@@ -3878,6 +3880,37 @@ class Component extends DCLogic {
     this.toast('All open quotes cleared.');
   };
 
+  // Cleanup used by the Closed Quotes upload. Returns { payload, records } — payload is null when no quote rows change.
+  //  - Open-quote rows: removed when FeneVision has closed that quote # (any close record) or the quote is over 12 months old.
+  //  - Rep follow-ups (no "Per upload" stamp) are always kept.
+  //  - FeneVision close records are kept only while their quote # is still in the open list, or when a rep's in-app
+  //    follow-up has the same quote # + customer (that record is what keeps an after-the-fact log out of the tallies).
+  _pruneClosed(payload, records) {
+    const isUp = r => /per upload/i.test(((r && r.answers) || {}).details || '');
+    const nq = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const closedQ = new Set(records.filter(isUp).map(r => nq(r.quoteNo)).filter(Boolean));
+    let next = null;
+    const keptQ = new Set();
+    if (payload && Array.isArray(payload.rows) && Array.isArray(payload.cols)) {
+      const ci = {}; payload.cols.forEach((c, i) => ci[c] = i);
+      const cut = Math.floor((Date.now() - Date.UTC(1899, 11, 30)) / 86400000) - 365;
+      const rows = payload.rows.filter(row => {
+        const q = nq(row[ci.quoteNo]);
+        if (q && closedQ.has(q)) return false;
+        const ds = row[ci.dateSerial];
+        if (typeof ds === 'number' && ds < cut) return false;
+        return true;
+      });
+      rows.forEach(row => keptQ.add(nq(row[ci.quoteNo])));
+      if (rows.length !== payload.rows.length) next = { ...payload, rows };
+    } else {
+      return { payload: null, records };
+    }
+    const live = this._liveKeys || new Set();
+    const kept = records.filter(r => !isUp(r) || keptQ.has(nq(r.quoteNo)) || live.has(r.matchKey || this.qkey(r)));
+    return { payload: next, records: kept };
+  }
+
   onUploadGlass = (e) => this.onUpload(e, 'Glass');
   onUploadMetal = (e) => this.onUpload(e, 'Metal');
   // Apply a Fenevision "closed quotes" upload: match by quote #, keep existing app info,
@@ -3963,7 +3996,16 @@ class Component extends DCLogic {
       byKey[key] = rec; applied++;
       closeNow.push(this.emailKey(rec)); // upload-added records get the Closed in Fenevision box checked too
     });
-    const merged = Object.values(byKey);
+    // Keep the shared data small: drop open-quote rows FeneVision has closed (matched by quote # only) or that
+    // are over 12 months old, and drop FeneVision close records nothing on screen still needs.
+    let closePart = {};
+    const pr = this._pruneClosed(this._quotesPayload, Object.values(byKey));
+    const merged = pr.records;
+    if (pr.payload) {
+      this._quotesPayload = pr.payload;
+      try { await this.idbSet('current', pr.payload); } catch (e) {}
+      this.setState({ rows: this.normalize(pr.payload) });
+    }
     await this.idbSet('importedLog', { records: merged, _meta: fileName });
     const imported = merged.map((r, i) => ({ ...r, rep: this.normalizeRep(r.rep || ''), uid: 'imp' + i, matchKey: this.qkey(r), source: 'import' }));
     // Mark the rep-logged ones Closed in Fenevision (keeps their outcome + credit)
@@ -3976,10 +4018,12 @@ class Component extends DCLogic {
       this.idbSet('closedKeys', closedKeys).catch(() => {});
       this.idbSet('closedDates', closedDates).catch(() => {});
       try { await this.idbSet('logged', this.state.stored || []); } catch (e) {}
-      this.autoPublish && this.autoPublish({ appendClosed: closeNow, setClosedDates: newDates });
+      // Sent with the quotes/log push below, in ONE request: two pushes at once each read the shared copy and the
+      // second write would put back what the first one changed.
+      closePart = { appendClosed: closeNow, setClosedDates: newDates };
     }
     this.setState({ imported });
-    this.maybePushAfterUpload({ log: { records: merged, _meta: fileName } });
+    this.maybePushAfterUpload({ ...(pr.payload ? { quotes: pr.payload } : {}), log: { records: merged, _meta: fileName, _replaceUpload: true }, ...closePart });
     this.toast(applied.toLocaleString() + ' closed quote' + (applied===1?'':'s') + ' applied (' + matched.toLocaleString() + ' matched open quotes' + (kept ? ' · ' + kept + ' already logged by reps — kept their outcome, marked Closed in Fenevision' : '') + ')');
   }
 

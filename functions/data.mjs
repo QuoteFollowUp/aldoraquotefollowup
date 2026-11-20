@@ -186,6 +186,19 @@ export default async (req) => {
       const cur = (existing.log && Array.isArray(existing.log.records)) ? existing.log.records.map(fixRecord) : [];
       const inc = (incoming.log && Array.isArray(incoming.log.records)) ? incoming.log.records.map(fixRecord) : [];
       if (incoming.log && incoming.log._meta === "cleared") merged.log = incoming.log;
+      else if (incoming.log && incoming.log._replaceUpload === true) {
+        // Closed Quotes upload cleanup: FeneVision close records ("Per upload") are replaced by the incoming set.
+        // Rep-entered follow-ups are never dropped here; they are carried over and de-duped as usual.
+        const isUp = (r) => /per upload/i.test(String(((r && r.answers) || {}).details || ""));
+        const k = (r) => { const a = (r && r.answers) || {};
+          const q = String((r && (r.quoteNo || r.quote)) || "").toUpperCase().replace(/[^A-Z0-9]/g, "") || String((r && r.customer) || "").toLowerCase();
+          const n = String((r && r.notes) || a.notes || a.details || "").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 80);
+          return q + "|" + String(a.outcome || "").toLowerCase() + "|" + n; };
+        const seen = new Set(), out = [];
+        for (const r of [...inc, ...cur.filter((x) => !isUp(x))]) { if (!r) continue; const kk = k(r); if (seen.has(kk)) continue; seen.add(kk); out.push(r); }
+        const { _replaceUpload, ...rest } = incoming.log;
+        merged.log = { ...rest, records: out };
+      }
       else {
         const k = (r) => { const a = (r && r.answers) || {};
           const q = String((r && (r.quoteNo || r.quote)) || "").toUpperCase().replace(/[^A-Z0-9]/g, "") || String((r && r.customer) || "").toLowerCase();
@@ -358,7 +371,7 @@ export default async (req) => {
     // Closed-in-Fenevision keys — add or remove (rep/estimator can toggle)
     if (Array.isArray(incoming.appendClosed) && incoming.appendClosed.length) {
       const cur = Array.isArray(merged.closedKeys) ? merged.closedKeys : [];
-      merged.closedKeys = [...new Set([...cur, ...incoming.appendClosed])].slice(-20000);
+      merged.closedKeys = [...new Set([...cur, ...incoming.appendClosed])].slice(-60000);
     }
     if (Array.isArray(incoming.removeClosed) && incoming.removeClosed.length) {
       const rm = new Set(incoming.removeClosed);
