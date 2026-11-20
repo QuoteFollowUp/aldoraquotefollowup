@@ -94,7 +94,7 @@ const logUsage = async (store, who, app) => {
 const isFred = (who) => !!who && who.role === "all" && /fred\s*haas/i.test(who.label || "");
 
 export default async (req) => {
-  const store = getStore("aldora-data");
+  const store = getStore({ name: "aldora-data", consistency: "strong" });
   const url = new URL(req.url);
   const who = whoIs(req);
   const required = loginRequired();
