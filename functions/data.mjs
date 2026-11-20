@@ -59,6 +59,8 @@ const NAME_FIXES = [
   { rep: /christian|kelley/i, from: /^\s*j\s*(?:&|and)?\s*l\s+glass\s*,?\s*(?:inc\.?)?\s*$/i, to: "J & L Glass LLC." },
   // Clarke's Rick's is in Savannah ("Rick's Glass, LLC."). "Ricks Glass Co" in Spartanburg is Zachary Mangum's.
   { rep: /clarke|chaas/i, from: /^\s*ricks?\s+glass\s*(?:co\.?|company)?\s*$/i, to: "Rick's Glass, LLC." },
+  // Anthony's Capitol City is "Capitol City Glass, Inc. VA" (Richmond). "CAPITOL CITY GLASS INC" (Indianapolis) is Christian Kelley's.
+  { rep: /anthony|aante|\bante\b/i, from: /^\s*capitol\s+city\s+glass\s*,?\s*(?:inc\.?)?\s*$/i, to: "Capitol City Glass, Inc. VA" },
 ];
 const fixRecord = (r) => {
   if (!r || typeof r !== "object" || !r.customer) return r;
@@ -135,7 +137,7 @@ export default async (req) => {
     let data = await store.get("snapshot", { type: "text" });
     // Rewrite saved calls once when a name fix applies, so every app reading the snapshot sees the fixed name
     try {
-      if (data && /riverside\s+glass|j\s*&\s*l\s+glass|ricks?\s+glass/i.test(data)) {
+      if (data && /riverside\s+glass|j\s*&\s*l\s+glass|ricks?\s+glass|capitol\s+city/i.test(data)) {
         const snap = JSON.parse(data);
         let changed = false;
         const before = JSON.stringify(snap.log || null);
