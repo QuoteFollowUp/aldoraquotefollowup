@@ -1439,7 +1439,7 @@
                 <tr class="aq-row" onClick="{{ c.onView }}" style="border-bottom:1px solid #eef1f1;vertical-align:top;cursor:pointer;">
                   <td style="padding:10px 13px;color:#5c6a68;white-space:nowrap;font-variant-numeric:tabular-nums;">{{ c.date }}</td>
                   <td style="padding:10px 13px;color:#16211f;font-weight:600;white-space:nowrap;">{{ c.rep }}</td>
-                  <td style="padding:10px 13px;color:#16211f;font-weight:600;max-width:150px;"><sc-if value="{{ c.hasRem }}" hint-placeholder-val="{{ false }}"><span title="{{ c.remTip }}" onClick="{{ goReminders }}" style="cursor:pointer;margin-right:4px;">🔔</span></sc-if>{{ c.customer }} <sc-if value="{{ c.isNew }}" hint-placeholder-val="{{ false }}"><span style="font-size:9.5px;font-weight:700;color:#1f7a3d;background:#e5f3e8;padding:1px 6px;border-radius:4px;">NEW</span></sc-if></td>
+                  <td style="padding:10px 13px;color:#16211f;font-weight:600;max-width:150px;"><sc-if value="{{ c.hasRem }}" hint-placeholder-val="{{ false }}"><span title="{{ c.remTip }}" onClick="{{ goReminders }}" style="cursor:pointer;margin-right:4px;">🔔</span></sc-if>{{ c.customer }} <sc-if value="{{ c.isNew }}" hint-placeholder-val="{{ false }}"><span style="font-size:9.5px;font-weight:700;color:#1f7a3d;background:#e5f3e8;padding:1px 6px;border-radius:4px;">NEW</span></sc-if><sc-if value="{{ c.noCredit }}" hint-placeholder-val="{{ false }}"><span title="Logged after 5:00 PM Friday. The notes stay, but this call does not count." style="font-size:9.5px;font-weight:700;color:#92400e;background:#fdf0e0;padding:1px 6px;border-radius:4px;margin-left:4px;">NO CREDIT</span></sc-if></td>
                   <td style="padding:10px 13px;color:#3a4846;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.contactName }}</td>
                   <td style="padding:10px 13px;color:#3a4846;white-space:nowrap;">{{ c.branch }}
                     <sc-if value="{{ c.hasMissing }}" hint-placeholder-val="{{ false }}">
@@ -4799,7 +4799,7 @@ class Component extends DCLogic {
     const nowWk = weekStartOf(Date.now());
     const prevWk = nowWk - WEEK;
     const byRep = {};
-    all.forEach(c => { const r = this.normalizeRep(c.rep || ''); if (!r) return; const t = parseDate(c.date); const a = byRep[r] || (byRep[r] = { n: 0, min: Infinity, max: 0, weeks: {}, weekAcctCalls: {}, custs: new Set(), newCusts: new Set() }); a.n++; const cust = this._acctKey(c.customer); if (t) { if (t < a.min) a.min = t; if (t > a.max) a.max = t; const wk = weekStartOf(t); a.weeks[wk] = (a.weeks[wk]||0)+1; const mw = a.modeWk || (a.modeWk = {}); const mm = mw[wk] || (mw[wk] = { p: 0, i: 0 }); if (this.callMode(c) === 'Phone') mm.p++; else mm.i++; const byAcct = a.weekAcctCalls[wk] || (a.weekAcctCalls[wk] = {}); const k = this._acctKey(c.customer) || ('__norm_' + c.rep + '_' + t); (byAcct[k] || (byAcct[k] = [])).push(c); } if (cust) { a.custs.add(cust); if (/^(yes|y|true|1)$/i.test(c.isNew||'')) a.newCusts.add(cust); } });
+    all.forEach(c => { if (this.noCredit(c)) return; const r = this.normalizeRep(c.rep || ''); if (!r) return; const t = parseDate(c.date); const a = byRep[r] || (byRep[r] = { n: 0, min: Infinity, max: 0, weeks: {}, weekAcctCalls: {}, custs: new Set(), newCusts: new Set() }); a.n++; const cust = this._acctKey(c.customer); if (t) { if (t < a.min) a.min = t; if (t > a.max) a.max = t; const wk = weekStartOf(t); a.weeks[wk] = (a.weeks[wk]||0)+1; const mw = a.modeWk || (a.modeWk = {}); const mm = mw[wk] || (mw[wk] = { p: 0, i: 0 }); if (this.callMode(c) === 'Phone') mm.p++; else mm.i++; const byAcct = a.weekAcctCalls[wk] || (a.weekAcctCalls[wk] = {}); const k = this._acctKey(c.customer) || ('__norm_' + c.rep + '_' + t); (byAcct[k] || (byAcct[k] = [])).push(c); } if (cust) { a.custs.add(cust); if (/^(yes|y|true|1)$/i.test(c.isNew||'')) a.newCusts.add(cust); } });
     // Weekly counts used for cadence ranking/display use the same account-crediting rule as
     // grading: repeat in-person visits to an account each count; a phone touch mixed in collapses
     // to one credit for that account.
@@ -4973,7 +4973,7 @@ class Component extends DCLogic {
       oppDdLabel: oppSel.length === 0 ? 'All opportunities' : oppSel.length === 1 ? oppSel[0] : oppSel.length + ' opportunities',
       clOppOpen: !!s.clOppOpen, toggleOppDd: this.toggleOppDd, clearOppSel: this.clearOppSel, closeOppDd: this.closeOppDd,
       ...(() => { const op = (s.reminders || []).filter(r => r && !r.deleted && !r.done); this._remByCall = {}; op.forEach(r => { if (r.fromCall) this._remByCall[r.fromCall] = r; }); this._remByCust = {}; op.forEach(r => { const k = this.normalizeRep(r.rep || '') + '|' + this._acctKey(r.customer); if (!this._remByCust[k]) this._remByCust[k] = r; }); return {}; })(),
-      callRows: slice.map(c => { const cs = custStats[csKey(c)] || { n:0, last:0 }; const _rm = (this._remByCall || {})[c.uid] || (this._remByCust || {})[this.normalizeRep(c.rep || '') + '|' + this._acctKey(c.customer)]; const _md = this.callMode(c); return { hasRem: !!_rm, remTip: _rm ? 'Reminder: ' + _rm.type + ' on ' + _rm.due + (_rm.note ? ' — ' + _rm.note : '') : '', mode: _md, modeIsPhone: _md === 'Phone', modeFg: _md === 'Phone' ? '#075b65' : '#7a4510', modeBg: _md === 'Phone' ? '#e6efef' : '#fdf0e0', barrier: String(c.barrier || '').trim() || '—', loggedTime: this.fmtLoggedAt(c, true), date: c.date || '—', rep: this.normalizeRep(c.rep || '') || '—', customer: c.customer || '—', branch: c.branch || '—', contactName: c.contactName || '—', acctType: c.acctType || '—', opportunity: c.bigCat || c.quotedProduct || '—', custCalls: cs.n, custLast: fmtD(cs.last), pulse: c.pulse || '', isNew: /^yes$/i.test(c.isNew || ''), hasAttn: !!(c.attention||'').trim(),
+      callRows: slice.map(c => { const cs = custStats[csKey(c)] || { n:0, last:0 }; const _rm = (this._remByCall || {})[c.uid] || (this._remByCust || {})[this.normalizeRep(c.rep || '') + '|' + this._acctKey(c.customer)]; const _md = this.callMode(c); return { noCredit: this.noCredit(c), hasRem: !!_rm, remTip: _rm ? 'Reminder: ' + _rm.type + ' on ' + _rm.due + (_rm.note ? ' — ' + _rm.note : '') : '', mode: _md, modeIsPhone: _md === 'Phone', modeFg: _md === 'Phone' ? '#075b65' : '#7a4510', modeBg: _md === 'Phone' ? '#e6efef' : '#fdf0e0', barrier: String(c.barrier || '').trim() || '—', loggedTime: this.fmtLoggedAt(c, true), date: c.date || '—', rep: this.normalizeRep(c.rep || '') || '—', customer: c.customer || '—', branch: c.branch || '—', contactName: c.contactName || '—', acctType: c.acctType || '—', opportunity: c.bigCat || c.quotedProduct || '—', custCalls: cs.n, custLast: fmtD(cs.last), pulse: c.pulse || '', isNew: /^yes$/i.test(c.isNew || ''), hasAttn: !!(c.attention||'').trim(),
         // The ⚠ marker only appears for the branch a manager has actually selected, and only while unresolved
         showAttn: !!(c.attention||'').trim() && !!br && (c.branch||'') === br && (s.attnDoneKeys||[]).indexOf(this.attnKey(c)) < 0,
         attnCleared: !!(c.attention||'').trim() && !!br && (c.branch||'') === br && (s.attnDoneKeys||[]).indexOf(this.attnKey(c)) >= 0,
@@ -5088,6 +5088,7 @@ class Component extends DCLogic {
   // Same day as the call, or entered later (end of day vs next morning)
   loggedLag(c) {
     const t = this.callLoggedReal(c);
+    if (this.noCredit(c)) return 'No credit: logged after Fri 5 PM';
     const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(c && c.date || ''));
     if (!t || !m) return '';
     const d = new Date(t);
@@ -6312,6 +6313,24 @@ class Component extends DCLogic {
   _wkKey(ms) { const m = new Date(this._mondayMs(ms)); return m.getUTCFullYear() + '-' + String(m.getUTCMonth() + 1).padStart(2, '0') + '-' + String(m.getUTCDate()).padStart(2, '0'); }
   _wkLabel(key) { const [y, m, d] = key.split('-').map(Number); return m + '/' + d; }
   _callMs(c) { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(c.date || '')); return m ? Date.UTC(+m[3], +m[1] - 1, +m[2]) : 0; }
+  // Friday 5 PM cutoff (Fred, Nov 20 2026, starting the week of Nov 16): a call entered after 5:00 PM Eastern on the
+  // Friday of its call week keeps its notes in the Call Log but gets no credit: no count on any chart, total or grade.
+  // Week = Monday to Sunday by call date. Calls with no real entry time (old imports) keep credit.
+  CREDIT_CUTOFF_START = Date.UTC(2026, 10, 16)
+  _fri5pm(mondayMs) {
+    const fri = new Date(mondayMs + 4 * 86400000), noon = new Date(Date.UTC(fri.getUTCFullYear(), fri.getUTCMonth(), fri.getUTCDate(), 12));
+    const etHour = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hourCycle: 'h23' }).format(noon);
+    return Date.UTC(fri.getUTCFullYear(), fri.getUTCMonth(), fri.getUTCDate(), 17 + (12 - etHour));
+  }
+  noCredit(c) {
+    if (!c) return false;
+    const ms = this._callMs(c); if (!ms) return false;
+    const mon = this._mondayMs(ms); if (mon < this.CREDIT_CUTOFF_START) return false;
+    const t = this.callLoggedReal(c); if (!t) return false;
+    return t >= this._fri5pm(mon);
+  }
+  // The calls that count. Use this, not state.calls, for any number, chart, pace or grade.
+  creditCalls() { return this._memo('credit', [this.state.calls], () => (this.state.calls || []).filter(c => !this.noCredit(c))); }
   // No note-length minimum: every logged call counts. Note length is still scored in its own category.
   isValidCall(c) { return !!c; }
   // How the call was made. Only the explicit Phone Call checkbox counts — note text is never
@@ -6355,7 +6374,7 @@ class Component extends DCLogic {
   repWeeks(rep) {
     return this._memo('rw:' + rep, [this.state.calls, rep], () => {
       const out = {};
-      (this.state.calls || []).forEach(c => {
+      this.creditCalls().forEach(c => {
         if (this.normalizeRep(c.rep || '') !== rep) return;
         const ms = this._callMs(c); if (!ms) return;
         const k = this._wkKey(ms);
@@ -6970,7 +6989,7 @@ class Component extends DCLogic {
     let uniq = 0;
     Object.values(byAcctW).forEach(list => { const ip = list.filter(c => this.callMode(c) === 'In-person').length; uniq += ip; });
     const pace = Math.min(25, (Math.min(dow, 4) + 1) * 5);
-    const today = (this.state.calls || []).filter(c => this.normalizeRep(c.rep || '') === rep && this.callLoggedReal(c) &&
+    const today = this.creditCalls().filter(c => this.normalizeRep(c.rep || '') === rep && this.callLoggedReal(c) &&
       new Date(this.callLoggedReal(c)).toDateString() === now.toDateString());
     const validToday = today.filter(c => this.isValidCall(c)).length;
     const lagged = today.map(c => ({ c, lag: Math.floor((todayMs - this._callMs(c)) / 86400000) })).filter(x => x.lag > 0);
@@ -7021,7 +7040,7 @@ class Component extends DCLogic {
     // company average wasted-call rate across all reps
     let coWasted = null;
     { let w = 0, t = 0; const WASTED = /wasn'?t in|not in|no answer|nobody (home|there)|left (my |a |his |her )?card|left (a )?(message|note|vm|voicemail)|voicemail|drove by|drop(ped)? (off|by)|out of (the )?office|missed (him|her|them)|couldn'?t reach|gone for the day/i;
-      (this.state.calls||[]).forEach(c=>{ t++; if (WASTED.test(c.pulse||'')) w++; }); coWasted = t ? Math.round(w/t*100) : 0; }
+      this.creditCalls().forEach(c=>{ t++; if (WASTED.test(c.pulse||'')) w++; }); coWasted = t ? Math.round(w/t*100) : 0; }
     let card = null;
     if (rep) {
       const sc = this.scorecard(rep, mk);
@@ -7566,7 +7585,7 @@ class Component extends DCLogic {
   scorecard(rep, monthKey) {
     const parseDate = (d) => { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(d || ''); return m ? { ms: Date.UTC(+m[3], +m[1]-1, +m[2]), mk: m[3] + '-' + String(+m[1]).padStart(2,'0'), y:+m[3], mo:+m[1] } : null; };
     const WASTED = /wasn'?t in|not in|no answer|nobody (home|there)|left (my |a |his |her )?card|left (a )?(message|note|vm|voicemail)|voicemail|drove by|drop(ped)? (off|by)|out of (the )?office|missed (him|her|them)|couldn'?t reach|gone for the day|will (try|catch) (again|next)/i;
-    const mineAll = (this.state.calls || []).filter(c => this.normalizeRep(c.rep||'') === rep).map(c => ({ ...c, _d: parseDate(c.date) })).filter(c => c._d);
+    const mineAll = this.creditCalls().filter(c => this.normalizeRep(c.rep||'') === rep).map(c => ({ ...c, _d: parseDate(c.date) })).filter(c => c._d);
     const allMonths = !monthKey || monthKey === 'all';
     // Count all logged calls (no current-month exclusion) so every call is reflected.
     const rawLatest = mineAll.length ? Math.max(...mineAll.map(c=>c._d.ms)) : 0;
@@ -8492,7 +8511,7 @@ class Component extends DCLogic {
   _prevWeek() {
     const parseDate = (d) => { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(d || ''); return m ? Date.UTC(+m[3], +m[1]-1, +m[2]) : 0; };
     const weekStartOf = (ms) => { const d = new Date(ms); const dow = (d.getUTCDay()+6)%7; return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()-dow); };
-    const all = this.state.calls || [];
+    const all = this.creditCalls();
     const seen = new Set();
     const dedup = all.filter(c => { const k = (String(c.date||'').trim()+'|'+this.normalizeRep(c.rep||'').toLowerCase()+'|'+(c.customer||'').toLowerCase()+'|'+(c.pulse||'').toLowerCase().slice(0,60)); if (seen.has(k)) return false; seen.add(k); return true; });
     const wkCount = {};
@@ -9814,7 +9833,7 @@ class Component extends DCLogic {
     const isAct = r => act.has(this.normalizeRep(r || ''));
     const tally = (m, k, rep, w) => { if (!k || !isAct(rep)) return; const o = m[k] || (m[k] = {}); const n = this.normalizeRep(rep); o[n] = (o[n] || 0) + w; };
     const byCall = {}, byQuote = {};
-    (this.state.calls || []).forEach(c => { if (!c || c.deleted) return; tally(byCall, this._custKey(c.customer), c.rep, 1); });
+    this.creditCalls().forEach(c => { if (!c || c.deleted) return; tally(byCall, this._custKey(c.customer), c.rep, 1); });
     rows.forEach(q => tally(byQuote, this._custKey(q.customer), q.rep, 1));
     const best = (o, br) => { if (!o) return ''; const list = Object.entries(o).sort((a, b) => b[1] - a[1]);
       if (br) { const same = list.find(([r]) => this._brNorm(this.CALL_REP_BRANCH[r] || '') === this._brNorm(br)); if (same) return same[0]; }
