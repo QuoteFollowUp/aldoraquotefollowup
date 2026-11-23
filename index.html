@@ -3656,7 +3656,16 @@ class Component extends DCLogic {
       const pend = this._loadPendingFlags();
       const pick = m => { const o = { ...(cloud.flags[m] || {}) }; pend.forEach(p => { if (p.m !== m) return; if (p.del) delete o[p.k]; else o[p.k] = p.v; }); return o; };
       const vw = pick('vacationWeeks'), ow = pick('officeWeeks'), nr = pick('newReps'), od = pick('offDays');
-      flagState = { vacationWeeks: vw, officeWeeks: ow, newReps: nr, offDays: od };
+      const ad = pick('attnDone');
+      // One time on this device: send handled calls that were only saved here before they were shared
+      let mig = false; try { mig = localStorage.getItem('aq_attnShared') === '1'; } catch (e) {}
+      if (!mig) {
+        try { localStorage.setItem('aq_attnShared', '1'); } catch (e) {}
+        const local = (this.state.attnDoneKeys || []).filter(k => k && !ad[k]);
+        if (local.length) { local.forEach(k => { ad[k] = true; }); setTimeout(() => this.pushRepFlags(local.map(k => ({ m: 'attnDone', k, v: true }))), 0); }
+      }
+      flagState = { vacationWeeks: vw, officeWeeks: ow, newReps: nr, offDays: od, attnDoneKeys: Object.keys(ad) };
+      this.idbSet('attnDoneKeys', Object.keys(ad)).catch(() => {});
       if (pend.length) setTimeout(() => this.flushFlags(), 0);
       this.idbSet('offDays', od).catch(() => {});
       this.idbSet('vacationWeeks', vw).catch(() => {});
@@ -6278,10 +6287,12 @@ class Component extends DCLogic {
   toggleAttnDone = (c) => {
     const k = this.attnKey(c);
     const cur = this.state.attnDoneKeys || [];
-    const done = cur.indexOf(k) < 0 ? [...cur, k] : cur.filter(x => x !== k);
+    const adding = cur.indexOf(k) < 0;
+    const done = adding ? [...cur, k] : cur.filter(x => x !== k);
     this.setState({ attnDoneKeys: done });
     this.idbSet('attnDoneKeys', done).catch(() => {});
-    this.autoPublish && this.autoPublish({ appendAttnDone: [k] });
+    // Shared: handled calls drop off for every manager, and off the Sales Hub's Manager queue
+    this.pushRepFlags([adding ? { m: 'attnDone', k, v: true } : { m: 'attnDone', k, del: true }]);
   };
   // ===================== WEEKLY ACTIVITY SCORING ENGINE =====================
   // The week (Mon–Fri) is the graded unit. Longer periods average the WEEKLY scores;
