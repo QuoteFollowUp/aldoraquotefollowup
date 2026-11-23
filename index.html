@@ -2170,6 +2170,7 @@
                       <option value="Out sick">Out sick</option>
                       <option value="In office">In office</option>
                       <option value="Vacation">Vacation</option>
+                      <option value="Aldora closed">Aldora closed (all reps)</option>
                     </select>
                   </div>
                 </sc-for>
@@ -5042,7 +5043,7 @@ class Component extends DCLogic {
         const days = this.offDaysFor(cr.rep, wk), rs = this._dayReasons(cr.rep, wk);
         const NAMES = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
         const rows = [1, 2, 3, 4, 5].map(n => { const dt = new Date(w0 + (n - 1) * 86400000); const r = days.indexOf(n) >= 0 ? (rs[n] || 'Day off') : '';
-          return { label: NAMES[n] + ' ' + (dt.getUTCMonth() + 1) + '/' + dt.getUTCDate(), reason: r, bg: r ? '#fff4d6' : '#fff', onPick: (e) => this.setOffDay(cr.rep, wk, n, e.target.value) }; });
+          return { label: NAMES[n] + ' ' + (dt.getUTCMonth() + 1) + '/' + dt.getUTCDate(), reason: r, bg: r === 'Aldora closed' ? '#e3eef0' : r ? '#fff4d6' : '#fff', onPick: (e) => this.setOffDay(cr.rep, wk, n, e.target.value) }; });
         const n = days.length, tgt = this.weekTarget(cr.rep, wk);
         return { cadAdmin: admin, cadNotAdmin: !admin, cadSchedWk: wk, cadSchedWeeks: weeks, cadSchedDays: rows,
           onCadSchedWk: (e) => this.setState({ cadSchedWk: e.target.value }),
@@ -6947,14 +6948,43 @@ class Component extends DCLogic {
     this.pushRepFlags([removing ? { m: 'officeWeeks', k, del: true } : { m: 'officeWeeks', k, v: true }]);
   };
   // Days off within a week (Mon=1 … Fri=5). Each day off takes 5 off that week's 25-account target.
-  offDaysFor(rep, wkKey) { const v = (this.state.offDays || {})[rep + '|' + wkKey]; return Array.isArray(v) ? v : []; }
+  // Aldora closed: company-wide days (holidays, weather) stored once under ALDORA_CLOSED and
+  // applied to every rep, so each rep's minimum drops 5 per closed day and pace skips those days.
+  ALDORA_CLOSED = '__ALDORA_CLOSED__';
+  closedDaysFor(wkKey) { const v = (this.state.offDays || {})[this.ALDORA_CLOSED + '|' + wkKey]; return Array.isArray(v) ? v.map(Number) : []; }
+  offDaysFor(rep, wkKey) {
+    const v = (this.state.offDays || {})[rep + '|' + wkKey];
+    const own = Array.isArray(v) ? v.map(Number) : [];
+    const shut = rep === this.ALDORA_CLOSED ? [] : this.closedDaysFor(wkKey);
+    return shut.length ? [...new Set([...own, ...shut])].sort() : own;
+  }
   weekTarget(rep, wkKey) { return Math.max(0, this.ACT.uniqueFloor - 5 * this.offDaysFor(rep, wkKey).length); }
   // Manager schedule: any week, any day, with a reason. Every reason takes the day out of that
   // week's minimum (25 less 5 per day); a full week out excludes the week like vacation.
-  _dayReasons(rep, wkKey) { const v = (this.state.offDays || {})[rep + '|' + wkKey + '|r']; return v && typeof v === 'object' ? v : {}; }
+  _dayReasons(rep, wkKey) {
+    const v = (this.state.offDays || {})[rep + '|' + wkKey + '|r'];
+    const out = v && typeof v === 'object' ? { ...v } : {};
+    this.closedDaysFor(wkKey).forEach(d => { out[d] = 'Aldora closed'; });
+    return out;
+  }
   setOffDay = (rep, wkKey, day, reason) => this.setOffDays(rep, wkKey, [day], reason);
   setOffDays = (rep, wkKey, days, reason) => {
-    const cur = { ...(this.state.offDays || {}) };
+    // Aldora closed is company-wide: picking it closes that day for every rep; clearing a closed day reopens it for everyone
+    const shut = this.closedDaysFor(wkKey);
+    const reopen = reason === '' ? days.filter(d => shut.indexOf(d) >= 0) : [];
+    if (rep !== this.ALDORA_CLOSED && (reason === 'Aldora closed' || reopen.length)) {
+      const closing = reason === 'Aldora closed', ds = closing ? days : reopen;
+      const [y, m, dd] = wkKey.split('-').map(Number); const w0 = Date.UTC(y, m - 1, dd);
+      const names = ds.map(d => { const t = new Date(w0 + (d - 1) * 86400000); return ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'][d] + ' ' + (t.getUTCMonth() + 1) + '/' + t.getUTCDate(); }).join(', ');
+      if (!window.confirm(closing ? 'Mark Aldora closed on ' + names + ' for EVERY rep? Each rep\'s minimum drops 5 calls per closed day.' : names + (ds.length > 1 ? ' are' : ' is') + ' marked Aldora closed for every rep. Reopen for everyone?')) { this.setState({}); return; }
+      const after = this._setOwnOffDays(this.ALDORA_CLOSED, wkKey, ds, closing ? 'Aldora closed' : '');
+      if (!closing) this._setOwnOffDays(rep, wkKey, days, '', after);
+      return;
+    }
+    return this._setOwnOffDays(rep, wkKey, days, reason);
+  };
+  _setOwnOffDays = (rep, wkKey, days, reason, base) => {
+    const cur = { ...(base || this.state.offDays || {}) };
     const k = rep + '|' + wkKey, rk = k + '|r';
     const set = new Set(Array.isArray(cur[k]) ? cur[k] : []);
     const rs = { ...(cur[rk] && typeof cur[rk] === 'object' ? cur[rk] : {}) };
@@ -6965,6 +6995,7 @@ class Component extends DCLogic {
     this.setState({ offDays: cur });
     this.idbSet('offDays', cur).catch(() => {});
     this.pushRepFlags(ops);
+    return cur;
   };
   cadManagerLogin = () => {
     const code = window.prompt('Manager code:');
