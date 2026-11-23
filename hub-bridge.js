@@ -53,6 +53,7 @@
   //   #ac=CODE&go=quote&q=QUOTE#&c=CUSTOMER&job=JOB   Biggest opportunities: the quote's follow-up record
   //                                                     (or Open Quotes narrowed to it)
   //   #ac=CODE&go=rem&uid=UID                           Accounts due a visit, scheduled or overdue: that reminder
+  //   #ac=CODE&go=attn&br=BRANCH                       Manager needs attention: the Call Log, that branch's flagged calls
   //   #ac=CODE&go=log                                   Log a call button: the Log a Call / Visit form
   //   #ac=CODE&go=visit&c=CUSTOMER&rep=REP              Accounts due a visit, gone quiet: a new Visit reminder
   //                                                     for that customer and rep, ready to pick a date
@@ -62,10 +63,10 @@
   var GO = null;
   try {
     var gh = location.hash || "";
-    var gm = /(?:^#|&)go=(quote|rem|visit|log)(?:&|$)/.exec(gh);
+    var gm = /(?:^#|&)go=(quote|rem|visit|log|attn)(?:&|$)/.exec(gh);
     if (gm && !/(?:^#|&)hubjob=1(?:&|$)/.test(gh)) {
       var gp = new URLSearchParams(gh.slice(1));
-      GO = { go: gm[1], q: gp.get("q") || "", c: gp.get("c") || "", job: gp.get("job") || "", uid: gp.get("uid") || "", rep: gp.get("rep") || "" };
+      GO = { go: gm[1], q: gp.get("q") || "", c: gp.get("c") || "", job: gp.get("job") || "", uid: gp.get("uid") || "", rep: gp.get("rep") || "", br: gp.get("br") || "" };
       var gc = gp.get("ac");
       if (gc) {
         var sv = null; try { sv = JSON.parse(localStorage.getItem("aq_access") || "null"); } catch (e) {}
@@ -96,6 +97,7 @@
     var r = await readyLogic();
     var L = r.L;
     if (!L || r.gate || r.timeout) return;
+    if (go.go === "attn") { try { L.goCalls(); setTimeout(function () { try { L.setState({ cl_branches: go.br ? [go.br] : [], cl_attn: !!go.br, attnDismissed: false, callPage: 0 }); } catch (e) {} }, 60); } catch (e) {} return; }
     if (go.go === "log") { try { L.goCalls(); setTimeout(function () { try { L.openCallForm(); } catch (e) {} }, 60); } catch (e) {} return; }
     if (go.go === "rem") return openReminder(L, go);
     if (go.go === "visit") return newVisit(L, go);
