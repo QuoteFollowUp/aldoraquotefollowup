@@ -3388,7 +3388,17 @@ class Component extends DCLogic {
     try { localStorage.setItem('aq_access', JSON.stringify(rec)); if (rec.role === 'rep') localStorage.setItem('aq_rep', this.normalizeRep(rec.rep)); } catch (err) {}
     this._scope = this._makeScope(rec);
     this._callsLoading = false;
-    this._pingUsage(true); this.setState({ callsLoaded: false, calls: [], accessGate: false, accessBusy: false, accessCode: '', accessWho: rec.label || '', ...(this._scope && this._scope.role === 'rep' ? { sc_rep: this._scope.rep, f_rep: this._scope.rep } : {}) }, () => { this.loadAll(); this.loadCalls(true); });
+    this._pingUsage(true); this.setState({ callsLoaded: false, calls: [], accessGate: false, accessBusy: false, accessCode: '', accessWho: rec.label || '', ...(this._scope && this._scope.role === 'rep' ? { sc_rep: this._scope.rep, f_rep: this._scope.rep } : {}) }, () => { this.loadAll(); this.loadCalls(true); this._deepLog(); });
+  };
+  // Deep link from the Sales Hub: ?log=1 (or #log) opens straight to the Log a Call form.
+  _deepLog = () => {
+    if (this._deepLogDone) return;
+    const want = /[?&]log=1\b/.test(location.search) || /^#log\b/.test(location.hash);
+    if (!want) return;
+    this._deepLogDone = true;
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    this.goCalls();
+    setTimeout(() => this.openCallForm(), 50);
   };
   signOutAccess = () => {
     if (!window.confirm('Sign out of the app on this device?')) return;
@@ -3469,7 +3479,7 @@ class Component extends DCLogic {
     this.idbGet('hfWho').then(w => { if (w) this.setState({ hfWho: w }); }).catch(() => {});
     this.idbGet('salesData').then(sd => { if (sd && sd.reps) this.setState({ salesData: sd.reps }); }).catch(() => {});
     try { if (sessionStorage.getItem('aq_calls_ok') === '1') this.setState({ callsUnlocked: true }); } catch (e) {}
-    this.checkAccess().then(ok => { if (ok) this.loadAll(); });
+    this.checkAccess().then(ok => { if (ok) { this.loadAll(); this._deepLog(); } });
 
     // Stay synced: re-pull the shared snapshot when the user returns to the app, plus a slow background refresh.
     this._syncRefresh = () => {
