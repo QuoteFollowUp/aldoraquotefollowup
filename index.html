@@ -1354,6 +1354,19 @@
         </div>
         <sc-if value="{{ hasCadence }}" hint-placeholder-val="{{ false }}">
           <div style="background:#0b201f;border-radius:12px;padding:16px 18px;margin-bottom:16px;">
+            <sc-if value="{{ closedShow }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#e3eef0;border:2px solid #7fd0d6;border-radius:12px;padding:14px 18px;margin-bottom:14px;">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#115E67" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path><path d="m9 14 6 6M15 14l-6 6"></path></svg>
+                <div style="flex:1;min-width:220px;">
+                  <div style="font-size:18px;font-weight:800;color:#0B434A;">{{ closedTitle }}</div>
+                  <div style="font-size:14px;color:#24433f;margin-top:3px;line-height:1.45;">{{ closedText }}</div>
+                </div>
+                <div style="text-align:center;background:#115E67;color:#fff;border-radius:10px;padding:8px 14px;">
+                  <div style="font-family:ui-monospace,Menlo,monospace;font-size:30px;font-weight:800;line-height:1;">{{ closedTarget }}</div>
+                  <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-top:3px;">calls this week</div>
+                </div>
+              </div>
+            </sc-if>
             <sc-if value="{{ isRepScope }}" hint-placeholder-val="{{ false }}">
               <sc-for list="{{ cadenceRows }}" as="c" hint-placeholder-count="1">
                 <div onClick="{{ c.onOpen }}" style="cursor:pointer;border-style:solid;border-width:{{ c.cardBw }};border-color:{{ c.cardBd }};border-radius:12px;padding:18px 20px;background:{{ c.cardBg }};">
@@ -4858,15 +4871,18 @@ class Component extends DCLogic {
     const off = this.state.officeWeeks || {};
     const lastFullKey = this._wkKey(lastFullWk);
     const nowKey = this._wkKey(nowWk);
+    const _shutNow = this.closedDaysFor(nowKey);
+    this._cadNowKey = nowKey;
     cadence.forEach(c => {
       // The office/vacation flag applies to THIS week (excludes it from this week's counts and
       // from grading); last week's stats and ranking are untouched by it.
       c.excusedThisWeek = !!vac[c.rep + '|' + nowKey];
       c.inOfficeThisWeek = !!off[c.rep + '|' + nowKey];
       c.offDaysThisWeek = this.offDaysFor(c.rep, nowKey);
+      c.ownOffThisWeek = c.offDaysThisWeek.filter(d => _shutNow.indexOf(d) < 0); // Aldora closed days show in the banner, not on each card
       c.targetThisWeek = this.weekTarget(c.rep, nowKey);
       c.flaggedThisWeek = c.excusedThisWeek || c.inOfficeThisWeek || c.offDaysThisWeek.length >= 5;
-      c.partialOff = !c.flaggedThisWeek && c.offDaysThisWeek.length > 0;
+      c.partialOff = !c.flaggedThisWeek && c.ownOffThisWeek.length > 0;
       c.excused = !!vac[c.rep + '|' + lastFullKey];
       c.inOffice = !!off[c.rep + '|' + lastFullKey];
       c.flagged = c.excused || c.inOffice;
@@ -4935,7 +4951,7 @@ class Component extends DCLogic {
       subColor: c.excludedThisWeek || c.partialOff ? '#e8b923' : '#7d938f',
       subWeight: c.excludedThisWeek || c.partialOff ? '800' : '400',
       sub: c.partialOff
-        ? 'OUT ' + c.offDaysThisWeek.map(d => DAYN[d] + ((this._dayReasons(c.rep, nowKey)[d] || '') && this._dayReasons(c.rep, nowKey)[d] !== 'Day off' ? ' (' + this._dayReasons(c.rep, nowKey)[d].toLowerCase() + ')' : '')).join(', ').toUpperCase() + ' — target ' + c.targetThisWeek + ' this week · ' + c.thisWeekRaw.toLocaleString() + ' so far'
+        ? 'OUT ' + c.ownOffThisWeek.map(d => DAYN[d] + ((this._dayReasons(c.rep, nowKey)[d] || '') && this._dayReasons(c.rep, nowKey)[d] !== 'Day off' ? ' (' + this._dayReasons(c.rep, nowKey)[d].toLowerCase() + ')' : '')).join(', ').toUpperCase() + ' — target ' + c.targetThisWeek + ' this week · ' + c.thisWeekRaw.toLocaleString() + ' so far'
         : c.excludedThisWeek
         ? (c.offDaysThisWeek.length >= 5 ? ((() => { const r = Object.values(this._dayReasons(c.rep, nowKey)); return r.length && r.every(x => x === r[0]) ? r[0].toUpperCase() + ' ALL WEEK' : 'OUT ALL WEEK'; })() + ' — excluded from counts this week')
           : c.excusedThisWeek ? 'ON VACATION — excluded from counts this week'
@@ -4945,7 +4961,7 @@ class Component extends DCLogic {
         ? (c.last ? 'no calls last week · last logged ' + fmtLast(c.last) : 'never logged')
           + (c.silentWeeks > 1 ? ' · ' + c.silentWeeks + ' silent weeks' : '')
         : (c.quietLastWeek ? 'no calls last week · ' : '') + c.thisWeekRaw.toLocaleString() + ' so far this week'
-          + (c.thisWeekRaw ? ' (' + c.modeNow.i + ' in person, ' + c.modeNow.p + ' phone) · ' + c.thisWeek + ' count toward 25' : ''),
+          + (c.thisWeekRaw ? ' (' + c.modeNow.i + ' in person, ' + c.modeNow.p + ' phone) · ' + c.thisWeek + ' count toward ' + c.targetThisWeek : '') + (_shutNow.length && !c.thisWeekRaw ? ' · target ' + c.targetThisWeek + ' this week' : ''),
       low: c.avg < 3, last: fmtLast(c.last),
       onOpen: () => this.setState({ cadSchedWk: '', cadenceRep: { modeNowIP: c.modeNow.i, modeNowPh: c.modeNow.p, modeLastIP: c.modeLast.i, modeLastPh: c.modeLast.p,
         phoneHeavyNow: c.modeNow.p > c.modeNow.i, phoneHeavyLast: c.modeLast.p > c.modeLast.i,
@@ -5029,6 +5045,20 @@ class Component extends DCLogic {
       clWeekOpen: !!s.clWeekOpen, toggleWeekDd: this.toggleWeekDd, clearWeekSel: this.clearWeekSel, closeWeekDd: this.closeWeekDd,
       callPageLabel: 'Page ' + (pg + 1) + ' of ' + pages,
       cadenceRows, hasCadence: cadenceRows.length > 0,
+      ...(() => {
+        // Aldora closed banner for the current week: one note instead of highlighting every rep
+        const nowKey = this._cadNowKey || '';
+        const shut = nowKey ? this.closedDaysFor(nowKey) : [];
+        if (!shut.length) return { closedShow: false, closedTitle: '', closedText: '', closedTarget: '' };
+        const FULL = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        const [y, m, d] = nowKey.split('-').map(Number); const w0 = Date.UTC(y, m - 1, d);
+        const names = shut.map(n => { const t = new Date(w0 + (n - 1) * 86400000); return FULL[n] + ' ' + (t.getUTCMonth() + 1) + '/' + t.getUTCDate(); });
+        const list = names.length === 1 ? names[0] : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+        const cut = 5 * shut.length, tgt = Math.max(0, this.ACT.uniqueFloor - cut);
+        return { closedShow: true, closedTitle: 'Aldora is closed ' + list,
+          closedText: shut.length >= 5 ? 'No calls are required this week.' : 'Every rep\'s required calls drop by ' + cut + ' this week, from ' + this.ACT.uniqueFloor + ' to ' + tgt + '. Pace skips the closed day' + (shut.length === 1 ? '' : 's') + '. Reps with their own days out drop further.',
+          closedTarget: String(tgt) };
+      })(),
       cadenceOffRows: s.cadenceRep ? [1, 2, 3, 4, 5].map(d => ({ label: ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'][d],
         checked: this.offDaysFor(s.cadenceRep.rep, s.cadenceRep.wkKeyNow).indexOf(d) >= 0,
         onToggle: () => this.toggleOffDay(s.cadenceRep.rep, s.cadenceRep.wkKeyNow, d) })) : [],
