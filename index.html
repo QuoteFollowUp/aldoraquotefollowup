@@ -10611,5 +10611,26 @@ class Component extends DCLogic {
   }
 }
 </script>
+<!-- Smarter not Harder: Aldora App Library strip. Hidden inside the Sales Hub, which shows the mark in its own top bar. -->
+<script>
+(function () {
+  try { if (window.self !== window.top) return; } catch (e) { return; }
+  function add() {
+    if (!document.body || document.getElementById("snhStrip")) return;
+    var css = document.createElement("style");
+    css.textContent = "#snhStrip{display:flex;align-items:center;gap:12px;padding:6px 14px;background:#fff;border-bottom:3px solid #6A9E39;font:600 13px/1.2 'IBM Plex Sans',Arial,sans-serif;color:#5E6E78;position:relative;z-index:5;width:100%;box-sizing:border-box;align-self:stretch;flex:none;margin:0}" +
+      "#snhStrip img{height:34px;width:auto;display:block}#snhStrip .snh-l{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+      "#snhStrip a.snh-hub{color:#115E67;text-decoration:none;font-weight:700;white-space:nowrap;padding:8px 4px}#snhStrip a.snh-hub:hover{text-decoration:underline}" +
+      "@media (max-width:520px){#snhStrip .snh-l{display:none}#snhStrip{justify-content:space-between}}@media print{#snhStrip{display:none}}";
+    document.head.appendChild(css);
+    var d = document.createElement("div");
+    d.id = "snhStrip";
+    d.innerHTML = '<a href="https://aldora-sales-hub.netlify.app/" aria-label="Aldora Sales Hub"><img src="https://aldora-sales-hub.netlify.app/brand-snh.png" srcset="https://aldora-sales-hub.netlify.app/brand-snh@2x.png 2x" alt="Smarter not Harder"></a>' +
+      '<span class="snh-l">The Aldora App Library</span><a class="snh-hub" href="https://aldora-sales-hub.netlify.app/">Open the Sales Hub &rarr;</a>';
+    document.body.insertBefore(d, document.body.firstChild);
+  }
+  if (document.body) add(); else document.addEventListener("DOMContentLoaded", add);
+})();
+</script>
 </body>
 </html>
